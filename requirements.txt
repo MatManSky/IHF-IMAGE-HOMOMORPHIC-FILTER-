@@ -1,0 +1,4 @@
+# IHF — Image Homomorphic Filter
+# Python >= 3.10
+numpy>=2.0
+gmpy2>=2.2.0
