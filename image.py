@@ -11,8 +11,9 @@
     - R — коэффициент отражения, float64 в диапазоне (R_MIN, 1], R > 0 строго
     - I — яркость, float64 в диапазоне (0, 255]
 
-0 < R(x,y) <= 1;
 0 < E(x,y) <= 255;
+0 < R(x,y) <= 1;
+I(x,y) = E(x,y) * R(x,y) => 0 < I(x,y) <= 255;
 """
 
 import numpy as np
@@ -66,8 +67,9 @@ def _exponential_matrix(n: int, m: int) -> np.ndarray:
     return e
 
 # Реестр типов матриц
-# Типы для R (отражение)
+# Типы для R (коэф. отражения)
 _r_types = {
+    "const": _const_matrix,
     "chess": _chess_matrix,
     "random": _random_matrix,
 }
