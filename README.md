@@ -59,3 +59,8 @@ R — `chess`, `random`.
 ## Лицензия
 
 MIT
+
+## Контакты
+
+matmansky@yandex.ru (Vladimir Yakovlev)
+
