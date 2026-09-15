@@ -36,6 +36,10 @@ def _random_matrix(n: int, m: int) -> np.ndarray:
     """Случайные коэффициенты отражения от 1/255 до 1"""
     return np.random.uniform(R_MIN, 1.0, size=(n, m))
 
+def _const_matrix_float(n: int, m: int) -> np.ndarray:
+    """Константные коэффициенты отражения — все единицы"""
+    return np.ones((n, m), dtype=np.float64)
+
 def _const_matrix(n: int, m: int) -> np.ndarray:
     """Константное освещение — все единицы"""
     return np.ones((n, m), dtype=np.int64)
@@ -69,7 +73,7 @@ def _exponential_matrix(n: int, m: int) -> np.ndarray:
 # Реестр типов матриц
 # Типы для R (коэф. отражения)
 _r_types = {
-    "const": _const_matrix,
+    "const": _const_matrix_float,
     "chess": _chess_matrix,
     "random": _random_matrix,
 }
