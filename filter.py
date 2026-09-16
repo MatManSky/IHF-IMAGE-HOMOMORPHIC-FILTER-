@@ -6,7 +6,7 @@
 
     1. Логарифмирование log2 (mpfr)
     2. Двумерное БПФ
-    3. Фильтрация (пока заглушка)
+    3. Фильтрация (фильтры из модуля filtration)
     4. Обратное двумерное БПФ
     5. Антилогарифмирование exp2 (mpfr)
     6. Округление к ближайшему целому с допуском погрешности обработки
@@ -15,6 +15,7 @@
 import numpy as np
 import gmpy2
 from gmpy2 import mpfr, mpc # mpc — это mpfr для комплексных чисел
+import filtration
 
 # Точность: 256 бит ~ 80 десятичных знаков
 _PRECISION_BITS = 256
@@ -139,12 +140,13 @@ class homomorphic_filter:
     Гомоморфный фильтр в арифметике произвольной точности
 
     Пример использования:
-        f = homomorphic_filter()
+        f = homomorphic_filter("allpass")         # Выбор фильтра
         result = f.apply(image_matrix)
     """
 
-    def __init__(self):
+    def __init__(self, filter_name: str = filtration.DEFAULT_FILTER):
         _setup_precision()
+        self._filter_name = filter_name
 
     def apply(self, image: np.ndarray) -> np.ndarray:
         """
@@ -166,7 +168,8 @@ class homomorphic_filter:
         # 2. Прямое БПФ
         spectrum = _fft_2d(log_data, inverse=False)
 
-        # 3. Фильтрация (пока заглушка)
+        # 3. Фильтрация
+        spectrum = filtration.apply_filter(self._filter_name, spectrum)
 
         # 4. Обратное БПФ
         restored = _fft_2d(spectrum, inverse=True)
