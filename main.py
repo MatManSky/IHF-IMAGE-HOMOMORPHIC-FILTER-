@@ -1,12 +1,11 @@
 """
 Главный модуль для тестирования гомоморфного фильтра.
 
-Содержит тесты с таблицами E, R, I, filtered:
-    - test_const_chess_64x64
-    - test_sawtooth_const_64x64
-    - test_const_random_16x16
-    - test_sawtooth_chess_64x64
-    - test_triangular_chess_16x16
+Примеры:
+    - test_identity_16_16
+    - test_butterworth_16_16
+    - test_chebyshev1_16_16
+    - test_gaussian_16_16
 """
 
 import numpy as np
@@ -20,104 +19,40 @@ def _print_matrix(label: str, matrix: np.ndarray) -> None:
     """Вывести матрицу с подписью"""
     print(f"{label}:")
     print(matrix)
+    print()
 
-
-def test_const_chess_64_64() -> None:
-    """E: const, R: chess, n: 64, m: 64"""
+def _run(lf_filter: str, hf_filter: str, lf_gain: float, hf_gain: float) -> None:
+    """Создать изображение (E: slow_changes, R: chess) и применить фильтр"""
     np.random.seed(42)
-
-    e, r, i = create_image("const", "chess", 64, 64)
-    f = homomorphic_filter()
+    e, r, i = create_image("slow_changes", "chess", 16, 16)
+    f = homomorphic_filter(lf_filter, hf_filter, lf_gain, hf_gain)
     filtered = f.apply(i)
 
-    print(f"E: const, R: chess, n: 64, m: 64")
+    print(f"E: slow_changes, R: chess, n: 16, m: 16, "
+          f"{lf_filter}, lf_gain={lf_gain}, hf_gain={hf_gain}")
     _print_matrix("E", e)
     _print_matrix("R", r)
     _print_matrix("I", i)
     _print_matrix("filtered", filtered)
-    print()
 
-def test_const_const_8_8() -> None:
-    """E: const, R: const, n: 8, m: 8"""
-    np.random.seed(42)
-
-    e, r, i = create_image("const", "const", 8, 8)
-    f = homomorphic_filter()
-    filtered = f.apply(i)
-
-    print(f"E: const, R: const, n: 8, m: 8")
-    _print_matrix("E", e)
-    _print_matrix("R", r)
-    _print_matrix("I", i)
-    _print_matrix("filtered", filtered)
-    print()
-
-def test_sawtooth_const_64_64() -> None:
-    """E: sawtooth, R: const, n: 64, m: 64"""
-    np.random.seed(42)
-
-    e, r, i = create_image("sawtooth", "const", 64, 64)
-    f = homomorphic_filter()
-    filtered = f.apply(i)
-
-    print(f"E: sawtooth, R: const, n: 64, m: 64")
-    _print_matrix("E", e)
-    _print_matrix("R", r)
-    _print_matrix("I", i)
-    _print_matrix("filtered", filtered)
-    print()
-
-def test_const_random_16_16() -> None:
-    """E: const, R: random, n: 16, m: 16"""
-    np.random.seed(42)
-
-    e, r, i = create_image("const", "random", 16, 16)
-    f = homomorphic_filter()
-    filtered = f.apply(i)
-
-    print(f"E: const, R: random, n: 16, m: 16")
-    _print_matrix("E", e)
-    _print_matrix("R", r)
-    _print_matrix("I", i)
-    _print_matrix("filtered", filtered)
-    print()
+def test_identity_16_16() -> None:
+    _run("lp_butterworth", "hp_butterworth", 1.0, 1.0)
 
 
-def test_sawtooth_chess_64_64() -> None:
-    """E: sawtooth, R: chess, n: 64, m: 64"""
-    np.random.seed(42)
-
-    e, r, i = create_image("sawtooth", "chess", 64, 64)
-    f = homomorphic_filter()
-    filtered = f.apply(i)
-
-    print(f"E: sawtooth, R: chess, n: 64, m: 64")
-    _print_matrix("E", e)
-    _print_matrix("R", r)
-    _print_matrix("I", i)
-    _print_matrix("filtered", filtered)
-    print()
+def test_butterworth_16_16() -> None:
+    _run("lp_butterworth", "hp_butterworth", 0.5, 2.0)
 
 
-def test_triangular_chess_16_16() -> None:
-    """E: triangular, R: chess, n: 16, m: 16"""
-    np.random.seed(42)
+def test_chebyshev1_16_16() -> None:
+    _run("lp_chebyshev1", "hp_chebyshev1", 0.5, 2.0)
 
-    e, r, i = create_image("triangular", "chess", 16, 16)
-    f = homomorphic_filter()
-    filtered = f.apply(i)
 
-    print(f"E: triangular, R: chess, n: 16, m: 16")
-    _print_matrix("E", e)
-    _print_matrix("R", r)
-    _print_matrix("I", i)
-    _print_matrix("filtered", filtered)
-    print()
+def test_gaussian_16_16() -> None:
+    _run("lp_gaussian", "hp_gaussian", 0.5, 2.0)
+
 
 if __name__ == "__main__":
-    test_sawtooth_const_64_64()
-    test_const_const_8_8()
-    test_const_chess_64_64()
-    test_const_random_16_16()
-    test_sawtooth_chess_64_64()
-    test_triangular_chess_16_16()
+    test_identity_16_16()
+    test_butterworth_16_16()
+    test_chebyshev1_16_16()
+    test_gaussian_16_16()

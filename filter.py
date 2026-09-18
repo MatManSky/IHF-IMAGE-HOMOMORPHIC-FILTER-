@@ -6,7 +6,7 @@
 
     1. Логарифмирование log2 (mpfr)
     2. Двумерное БПФ
-    3. Фильтрация (фильтры из модуля filtration)
+    3. Разделение спектра на НЧ и ВЧ, обработка, соединение
     4. Обратное двумерное БПФ
     5. Антилогарифмирование exp2 (mpfr)
     6. Округление к ближайшему целому с допуском погрешности обработки
@@ -137,16 +137,33 @@ def _fft_2d(data: list, inverse: bool = False) -> list:
 
 class homomorphic_filter:
     """
-    Гомоморфный фильтр в арифметике произвольной точности
-
     Пример использования:
-        f = homomorphic_filter("allpass")         # Выбор фильтра
-        result = f.apply(image_matrix)
+    f = homomorphic_filter(lf_gain=0.5, hf_gain=2.0)  # ослабить свет, усилить коэф. отр
+    result = f.apply(image_matrix)
     """
 
-    def __init__(self, filter_name: str = filtration.DEFAULT_FILTER):
-        _setup_precision()
-        self._filter_name = filter_name
+    def __init__(
+        self,
+        lf_filter: str = filtration.DEFAULT_LF_FILTER,
+        hf_filter: str = filtration.DEFAULT_HF_FILTER,
+        lf_gain: float = 1.0,
+        hf_gain: float = 1.0,
+    ):
+        # Пара ФНЧ и ФВЧ должна быть согласована
+        if not (
+            lf_filter.startswith("lp_")
+            and hf_filter == "hp_" + lf_filter[len("lp_"):]
+        ):
+            raise ValueError(
+                f"Несогласованная пара фильтров: '{lf_filter}' + '{hf_filter}'. "
+                f"Ожидается lp_X и hp_X одной семьи, например "
+                f"'{filtration.DEFAULT_LF_FILTER}' + "
+                f"'{filtration.DEFAULT_HF_FILTER}'."
+            )
+        self._lf_filter = lf_filter
+        self._hf_filter = hf_filter
+        self._lf_gain = mpfr(lf_gain)
+        self._hf_gain = mpfr(hf_gain)
 
     def apply(self, image: np.ndarray) -> np.ndarray:
         """
@@ -168,8 +185,23 @@ class homomorphic_filter:
         # 2. Прямое БПФ
         spectrum = _fft_2d(log_data, inverse=False)
 
-        # 3. Фильтрация
-        spectrum = filtration.apply_filter(self._filter_name, spectrum)
+        # 3. Обработка спектра
+        lf_matrix = filtration.get_filter(self._lf_filter, n, m)  # ФНЧ
+        hf_matrix = filtration.get_filter(self._hf_filter, n, m)  # ФВЧ
+
+        lf_spectrum = [
+            # Спектр * функция фильтра * коэф. усиления
+            [s * h * self._lf_gain for s, h in zip(row, matrix_row)]
+            for row, matrix_row in zip(spectrum, lf_matrix)
+        ]
+        hf_spectrum = [
+            [s * h * self._hf_gain for s, h in zip(row, matrix_row)]
+            for row, matrix_row in zip(spectrum, hf_matrix)
+        ]
+        spectrum = [
+            [lf + hf for lf, hf in zip(lf_row, hf_row)]
+            for lf_row, hf_row in zip(lf_spectrum, hf_spectrum)
+        ]
 
         # 4. Обратное БПФ
         restored = _fft_2d(spectrum, inverse=True)

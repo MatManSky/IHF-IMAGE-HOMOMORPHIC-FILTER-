@@ -70,6 +70,18 @@ def _exponential_matrix(n: int, m: int) -> np.ndarray:
         e[i, :] = np.clip(np.round(exp_scaled).astype(np.int64), 1, 255)
     return e
 
+def _slow_changes_matrix(n: int, m: int) -> np.ndarray:
+    """
+    Медленно меняющееся освещение: один период косинусоиды 1 -> 255 -> 1
+    по ширине. Периодична для ДПФ (края стыкуются без разрыва).
+    """
+    e = np.zeros((n, m), dtype=np.int64)
+    j = np.arange(m)
+    row = np.round(128 - 127 * np.cos(2 * np.pi * j / m)).astype(np.int64)
+    for i in range(n):
+        e[i, :] = row
+    return e
+
 # Реестр типов матриц
 # Типы для R (коэф. отражения)
 _r_types = {
@@ -84,6 +96,7 @@ _e_types = {
     "sawtooth": _sawtooth_matrix,
     "triangular": _triangular_matrix,
     "exponential": _exponential_matrix,
+    "slow_changes": _slow_changes_matrix,
 }
 
 # Типы по умолчанию
