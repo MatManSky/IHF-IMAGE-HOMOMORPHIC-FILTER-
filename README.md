@@ -1,10 +1,12 @@
 # IHF-IMAGE-HOMOMORPHIC-FILTER-
 Homomorphic image filtering using arbitrary-precision arithmetic (MPFR, 256-bit).
 
-**Версия: 0.24** — реализована базовая модель (a basic model has been implemented):
+**Версия: 0.26** — реализована базовая модель (a basic model has been implemented):
 `I = E·R` → `log2` → F → разделение спектра на НЧ- и ВЧ-компоненты
 (spectrum split into LF and HF parts) → обработка частей
 (part processing) → соединение → F^-1 → `exp2` → округление (rounding).  
+Цветной фильтр (color filter, `color_filter.py`): поканальная обработка R, G, B
+(each channel processed independently).  
 Код будет расширяться (The code will expand.).
 
 ## Требования (Requirements)
@@ -59,6 +61,7 @@ python main.py
 ## Использование (Usage)
 
 ```python
+import numpy as np
 from image import create_image
 from filter import homomorphic_filter
 
@@ -69,6 +72,18 @@ e, r, i = create_image("const", "chess", 64, 64)
 # Усиление ВЧ и ослабление НЧ (HF emphasis, LF suppression)
 f = homomorphic_filter(lf_gain=0.5, hf_gain=2.0)
 filtered = f.apply(i) # результат: int64 (result: int64)
+
+# Цветное изображение (n, m, 3): фильтр применяется к каждому каналу
+# (Color image (n, m, 3): the filter is applied to each channel)
+from color_filter import color_homomorphic_filter
+
+# Создаём три канала изображения (Create three image channels):
+i_r = create_image("const", "chess", 64, 64)[2]      # канал R (R channel)
+i_g = create_image("sawtooth", "chess", 64, 64)[2]   # канал G (G channel)
+i_b = create_image("triangular", "chess", 64, 64)[2] # канал B (B channel)
+
+color = np.stack([i_r, i_g, i_b], axis=2)  # shape (64, 64, 3)
+filtered_color = color_homomorphic_filter(lf_gain=0.5, hf_gain=2.0).apply(color)
 ```
 
 Фильтры выбираются в конструкторе (Filters are selected in the constructor):
