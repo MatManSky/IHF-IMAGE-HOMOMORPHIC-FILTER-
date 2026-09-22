@@ -134,12 +134,71 @@ def _fft_2d(data: list, inverse: bool = False) -> list:
 
     return result
 
+_WINDOW_FLOOR = mpfr(0.05) # Нижний предел окна
+
+def _next_power_of_two(size: int) -> int:
+    """Нужно для БПФ по Кули-Тьюки"""
+    return 1 << (size - 1).bit_length()
+
+
+def _mul_rows(data: list, weights: list) -> list:
+    """Поэлементное умножение двух матриц"""
+    return [
+        [v * w for v, w in zip(row, weight_row)]
+        for row, weight_row in zip(data, weights)
+    ]
+
+
+def _div_rows(data: list, weights: list) -> list:
+    """Компенсация окна: деление, ограниченное снизу _WINDOW_FLOOR"""
+    return [
+        [v / (w if w > _WINDOW_FLOOR else _WINDOW_FLOOR)
+         for v, w in zip(row, weight_row)]
+        for row, weight_row in zip(data, weights)
+    ]
+
+
+def _pad_to_power_of_two(data: list, mode: str = "zero") -> list:
+    """
+    Дополнить кадр до степени двойки:
+    1) "zero": нулями в лог области;
+    2) "reflect": зеркально, с повтором края.
+    """
+    rows, cols = len(data), len(data[0])
+    target_rows = _next_power_of_two(rows)
+    target_cols = _next_power_of_two(cols)
+
+    if target_cols > cols:
+        if mode == "zero":
+            extra = [mpc(0)] * (target_cols - cols)
+            data = [list(row) + extra for row in data]
+        else:
+            mirror = [cols - 1 - k % cols for k in range(target_cols - cols)]
+            data = [list(row) + [row[j] for j in mirror] for row in data]
+
+    if target_rows > rows:
+        if mode == "zero":
+            blank = [mpc(0)] * target_cols
+            data = list(data) + [list(blank) for _ in range(target_rows - rows)]
+        else:
+            mirror = [rows - 1 - k % rows for k in range(target_rows - rows)]
+            data = list(data) + [list(data[j]) for j in mirror]
+
+    return data
+
+def _crop(data: list, n: int, m: int) -> list:
+    """Отсечь дополнение: обратно к форме исходного кадра."""
+    return [row[:m] for row in data[:n]]
+
 
 class homomorphic_filter:
     """
     Пример использования:
     f = homomorphic_filter(lf_gain=0.5, hf_gain=2.0)  # ослабить свет, усилить коэф. отр
     result = f.apply(image_matrix)
+
+    Кадр произвольного размера для БПФ radix-2 дополняется:
+    f.apply(photo, pad="zero") или f.apply(photo, pad="reflect")
     """
 
     def __init__(
@@ -148,6 +207,9 @@ class homomorphic_filter:
         hf_filter: str = filtration.DEFAULT_HF_FILTER,
         lf_gain: float = 1.0,
         hf_gain: float = 1.0,
+        d0: float = filtration.D0_DEFAULT,
+        order: int = filtration.ORDER_DEFAULT,
+        ripple_db: float = filtration.RIPPLE_DB_DEFAULT,
     ):
         # Пара ФНЧ и ФВЧ должна быть согласована
         if not (
@@ -162,19 +224,34 @@ class homomorphic_filter:
             )
         self._lf_filter = lf_filter
         self._hf_filter = hf_filter
-        self._lf_gain = mpfr(lf_gain)
-        self._hf_gain = mpfr(hf_gain)
+        self._lf_gain = mpfr(lf_gain) # множитель НЧ-части: <1 ослабляет свет
+        self._hf_gain = mpfr(hf_gain) # множитель ВЧ-части: >1 подчёркивает детали
 
-    def apply(self, image: np.ndarray) -> np.ndarray:
+        # Параметры частотной сетки
+        self._filter_params = {
+            "d0": d0,  # Частота среза в пикселях
+            "order": order, # Крутизна среза АЧХ
+            "ripple_db": ripple_db, # Неравномерность АЧХ Чебышёва-1 в полосе пропускания
+        }
+
+    def apply(
+        self,
+        image: np.ndarray,
+        pad: str = None,
+        window: str = None,
+    ) -> np.ndarray:
         """
         Применить гомоморфный фильтр к изображению.
         (обработка в mpfr без промежуточных округлений)
 
         Параметры:
             image: входная матрица (numpy.ndarray, значения > 0)
+            pad: "zero" — дополнить кадр нулями до степени двойки,
+                 "reflect" — дополнить зеркально; 
+            window: имя окна из filtration, после ОБПФ окно компенсируется
 
         Возвращает:
-            numpy.ndarray: результат (int64)
+            numpy.ndarray: результат в формате входной матрицы (int64)
         """
         _setup_precision()
         n, m = image.shape
@@ -182,12 +259,24 @@ class homomorphic_filter:
         # 1. Логарифмирование
         log_data = self._logarithm(image)
 
+        # Окно и дополнение до степени двойки
+        window_matrix = (
+            filtration.get_window(window, n, m) if window is not None else None
+        )
+        if window_matrix is not None:
+            log_data = _mul_rows(log_data, window_matrix)
+        if pad is not None:
+            log_data = _pad_to_power_of_two(log_data, pad)
+
         # 2. Прямое БПФ
         spectrum = _fft_2d(log_data, inverse=False)
 
         # 3. Обработка спектра
-        lf_matrix = filtration.get_filter(self._lf_filter, n, m)  # ФНЧ
-        hf_matrix = filtration.get_filter(self._hf_filter, n, m)  # ФВЧ
+        size = (len(log_data), len(log_data[0]))
+        lf_matrix = filtration.get_filter(
+            self._lf_filter, *size, **self._filter_params)  # ФНЧ
+        hf_matrix = filtration.get_filter(
+            self._hf_filter, *size, **self._filter_params)  # ФВЧ
 
         lf_spectrum = [
             # Спектр * функция фильтра * коэф. усиления
@@ -205,6 +294,11 @@ class homomorphic_filter:
 
         # 4. Обратное БПФ
         restored = _fft_2d(spectrum, inverse=True)
+
+        # Антидополнение до степени двойки и компенсация окна
+        restored = _crop(restored, n, m)
+        if window_matrix is not None:
+            restored = _div_rows(restored, window_matrix)
 
         # 5-6. Антилогарифмирование и округление для вывода
         result = self._antilogarithm(restored, n, m)

@@ -23,9 +23,15 @@ class color_homomorphic_filter:
         hf_filter: str = filtration.DEFAULT_HF_FILTER,
         lf_gain: float = 1.0,
         hf_gain: float = 1.0,
+        d0: float = filtration.D0_DEFAULT,
+        order: int = filtration.ORDER_DEFAULT,
+        pad: str = None,
+        window: str = None,
     ):
         self._filter = homomorphic_filter(
-            lf_filter, hf_filter, lf_gain, hf_gain)
+            lf_filter, hf_filter, lf_gain, hf_gain, d0, order)
+        self._pad = pad
+        self._window = window
 
     def apply(self, image: np.ndarray) -> np.ndarray:
         """
@@ -48,6 +54,8 @@ class color_homomorphic_filter:
                 f"получена форма {image.shape}"
             )
         channels_out = [
-            self._filter.apply(image[:, :, k]) for k in range(CHANNELS)
+            self._filter.apply(image[:, :, k], pad=self._pad,
+                               window=self._window)
+            for k in range(CHANNELS)
         ]
         return np.stack(channels_out, axis=2)

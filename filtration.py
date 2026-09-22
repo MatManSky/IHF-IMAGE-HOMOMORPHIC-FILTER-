@@ -3,8 +3,12 @@
 
 Архитектура (как словари типов в image.py — без ООП):
     - _filter_types — реестр фильтров: имя -> функция матрицы H(u,v)
-    - get_filter(name, n, m) — матрица H (единственная точка входа)
+    - _window_types — реестр окон: имя -> функция матрицы w(i,j)
+    - get_filter(name, n, m, **params) — матрица H (единственная точка входа)
+    - get_window(name, n, m) — матрица окна w
 """
+
+import inspect
 
 import gmpy2
 from gmpy2 import mpfr
@@ -176,7 +180,7 @@ DEFAULT_LF_FILTER = "lp_butterworth"
 DEFAULT_HF_FILTER = "hp_butterworth"
 
 
-def get_filter(name: str, n: int, m: int) -> list:
+def get_filter(name: str, n: int, m: int, **params) -> list:
     """
     Получить матрицу H(u,v) размера n x m.
 
@@ -184,6 +188,8 @@ def get_filter(name: str, n: int, m: int) -> list:
         name: имя фильтра из реестра
         n: количество строк
         m: количество столбцов
+        **params: параметры фильтра (d0, order, ripple_db); каждому
+              фильтру передаются только те, что нужны
 
     Возвращает:
         list: матрица H из mpfr (список списков)
@@ -196,4 +202,71 @@ def get_filter(name: str, n: int, m: int) -> list:
             f"Неизвестный тип фильтра: '{name}'. "
             f"Доступные: {sorted(_filter_types)}."
         )
-    return _filter_types[name](n, m)
+    matrix_of = _filter_types[name]
+    declared = inspect.signature(matrix_of).parameters
+    return matrix_of(n, m, **{k: v for k, v in params.items() if k in declared})
+
+# Оконные функции
+TAPER_DEFAULT = 0.5      # доля ширины скоса окна Тьюки
+
+def _hann_axis(length: int) -> list:
+    """Ось окна Ханна: w = 0.5 − 0.5*cos(2*pi*i/(length−1)), края → 0."""
+    half = mpfr(0.5)
+    two_pi = 2 * gmpy2.const_pi()
+    return [
+        half - half * gmpy2.cos(two_pi * i / max(length - 1, 1))
+        for i in range(length)
+    ]
+
+
+def _tukey_axis(length: int, taper: float = TAPER_DEFAULT) -> list:
+    """
+    Ось окна Тьюки: 1 в середине, косинусный скос шириной
+    taper*(length−1)/2 с каждого края (taper → 0 — прямоугольник,
+    taper = 1 — окно Ханна).
+    """
+    edge = int(round(taper * (length - 1) / 2))
+    if edge < 1:
+        return [mpfr(1)] * length
+    half = mpfr(0.5)
+    pi = gmpy2.const_pi()
+    ramp = [half - half * gmpy2.cos(pi * i / max(edge - 1, 1))
+            for i in range(edge)]
+    return ramp + [mpfr(1)] * (length - 2 * edge) + ramp[::-1]
+
+
+def _outer(row_axis: list, col_axis: list) -> list:
+    return [[wx * wy for wy in col_axis] for wx in row_axis]
+
+
+def _hann_matrix(n: int, m: int) -> list:
+    return _outer(_hann_axis(n), _hann_axis(m))
+
+
+def _tukey_matrix(n: int, m: int, taper: float = TAPER_DEFAULT) -> list:
+    return _outer(_tukey_axis(n, taper), _tukey_axis(m, taper))
+
+
+_window_types = {
+    "hann": _hann_matrix,
+    "tukey": _tukey_matrix,
+}
+
+DEFAULT_WINDOW = "tukey"
+
+
+def get_window(name: str, n: int, m: int, **params) -> list:
+    """
+    Получить матрицу окна w(i,j) размера n x m (1 — сигнал нетронут).
+
+    Исключения:
+        ValueError: если name не из реестра
+    """
+    if name not in _window_types:
+        raise ValueError(
+            f"Неизвестный тип окна: '{name}'. "
+            f"Доступные: {sorted(_window_types)}."
+        )
+    matrix_of = _window_types[name]
+    declared = inspect.signature(matrix_of).parameters
+    return matrix_of(n, m, **{k: v for k, v in params.items() if k in declared})
