@@ -1,7 +1,7 @@
 # IHF-IMAGE-HOMOMORPHIC-FILTER-
 Homomorphic image filtering using arbitrary-precision arithmetic (MPFR, 256-bit).
 
-**Версия: 0.28** — реализована базовая модель (a basic model has been implemented):
+**Версия: 0.30** — реализована базовая модель (a basic model has been implemented):
 `I = E·R` → `log2` → F → разделение спектра на НЧ- и ВЧ-компоненты
 (spectrum split into LF and HF parts) → обработка частей
 (part processing) → соединение → F^-1 → `exp2` → округление (rounding).  
@@ -119,12 +119,15 @@ R — `chess`, `const`, `random`.
 ```powershell
 python examples/bw_image.py   # examples/pic1.png -> examples/pic1_processed.png
 ```
+Кадр 3264x1840 дополняется до 4096x2048 и обрабатывается mpfr — это
+несколько минут (several minutes of computation).
+
 
 ## Благодарности (Acknowledgements)
 
-Благодарю Константина Францевича Глассмана за консультации по гомоморфной фильтрации и обработке изображений.
-Благодарю glasgio за возможность использовать в качестве валидации результатов https://github.com/glasgio/homomorphic-filter
-(I thank Konstantin Frantsevich Glassman for his consultations on homomorphic filtering and image processing.
+Благодарю Константина Францевича Глассмана за консультации по гомоморфной фильтрации и обработке изображений.  
+Благодарю glasgio за возможность использовать в качестве валидации результатов https://github.com/glasgio/homomorphic-filter  
+(I thank Konstantin Frantsevich Glassman for his consultations on homomorphic filtering and image processing.  
 I thank glasgio for the opportunity to use https://github.com/glasgio/homomorphic-filter as a validation of the results)
 
 ## Лицензия (License)
