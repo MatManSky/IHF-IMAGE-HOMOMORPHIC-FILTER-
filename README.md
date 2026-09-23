@@ -29,6 +29,7 @@ pip install -r requirements.txt
 
 # Запустить тесты (run tests)
 python main.py
+python examples/bw_image.py
 ```
 
 ### Linux
@@ -43,6 +44,7 @@ pip install -r requirements.txt
 
 # Запустить тесты (run tests)
 python main.py
+python examples/bw_image.py
 ```
 
 ### macOS
@@ -57,6 +59,7 @@ pip install -r requirements.txt
 
 # Запустить тесты (run tests)
 python main.py
+python examples/bw_image.py
 ```
 
 ## Использование (Usage)
@@ -119,10 +122,35 @@ R — `chess`, `const`, `random`.
 ```powershell
 python examples/bw_image.py   # examples/pic1.png -> examples/pic1_processed.png
 ```
-Кадр 3264x1840 дополняется до 4096x2048 и обрабатывается mpfr — это
-несколько минут (several minutes of computation).
+Кадр 3264x1840 дополняется до 4096x2048 и обрабатывается mpfr за несколько
+минут (several minutes of computation).
 
+## Системные зависимости (System dependencies)
 
+`gmpy2` — единственная зависимость с нативным кодом, и начиная с версии 2.3.1 он
+ставится готовым колесом (Windows, macOS, Linux; CPython 3.9–3.15), так что на
+Windows достаточно `pip install -r requirements.txt`. Если колеса для вашей
+платформы нет и pip собирает gmpy2 из исходников, сборка падает без заголовков
+`libgmp`, `libmpfr` и `libmpc` — их устанавливают команды ниже:  
+(If building `gmpy2` from sources fails, install the headers of GMP, MPFR and MPC)
+
+**Debian / Ubuntu:**
+```bash
+sudo apt update
+sudo apt install -y libgmp-dev libmpfr-dev libmpc-dev
+```
+**Fedora:**
+```bash
+sudo dnf install -y gmp-devel mpfr-devel libmpc-devel
+```
+**Arch Linux:**
+```bash
+sudo pacman -S --needed gmp mpfr libmpc
+```
+**macOS:**
+```bash
+brew install gmp mpfr libmpc
+```
 ## Благодарности (Acknowledgements)
 
 Благодарю Константина Францевича Глассмана за консультации по гомоморфной фильтрации и обработке изображений.  
