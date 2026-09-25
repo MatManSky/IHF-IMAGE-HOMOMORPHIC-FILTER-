@@ -60,6 +60,17 @@ def test_chebyshev1_16_16() -> None:
 def test_gaussian_16_16() -> None:
     _run("lp_gaussian", "hp_gaussian", 0.5, 2.0)
 
+def test_black_square_info_16_16() -> None:
+    # тест всепропускающего фильтра
+    e, r, i = create_image("const", "black_square", 16, 16)
+    f = homomorphic_filter("allpass", "allpass", 1.0, 0.0)
+
+    print(f"E: const, R: black_square, n: 16, m: 16, allpass, "
+          f"lf_gain=1.0, hf_gain=0.0")
+    _print_matrix("E", e)
+    _print_matrix("R", r)
+    f.apply_info(i)
+
 
 def test_color_8_8() -> None:
     """Цветной вход (8, 8, 3): каналы E разные, R: chess, butterworth 0.5/2.0"""
@@ -85,3 +96,4 @@ if __name__ == "__main__":
     test_chebyshev1_16_16()
     test_gaussian_16_16()
     test_color_8_8()
+    test_black_square_info_16_16()

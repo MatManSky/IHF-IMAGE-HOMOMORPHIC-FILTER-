@@ -36,6 +36,20 @@ def _random_matrix(n: int, m: int) -> np.ndarray:
     """Случайные коэффициенты отражения от 1/255 до 1"""
     return np.random.uniform(R_MIN, 1.0, size=(n, m))
 
+def _square_matrix(n: int, m: int, field: float, patch: float) -> np.ndarray:
+    """
+    Прямоугольник в центре кадра (от 1/4 до 3/4)
+    """
+    r = np.full((n, m), field, dtype=np.float64)
+    r[n // 4:n - n // 4, m // 4:m - m // 4] = patch
+    return r
+
+def _black_square_matrix(n: int, m: int) -> np.ndarray:
+    return _square_matrix(n, m, field=R_MIN, patch=1.0)
+
+def _white_square_matrix(n: int, m: int) -> np.ndarray:
+    return _square_matrix(n, m, field=1.0, patch=R_MIN)
+
 def _const_matrix_float(n: int, m: int) -> np.ndarray:
     """Константные коэффициенты отражения — все единицы"""
     return np.ones((n, m), dtype=np.float64)
@@ -87,6 +101,8 @@ def _slow_changes_matrix(n: int, m: int) -> np.ndarray:
 _r_types = {
     "const": _const_matrix_float,
     "chess": _chess_matrix,
+    "black_square": _black_square_matrix,
+    "white_square": _white_square_matrix,
     "random": _random_matrix,
 }
 

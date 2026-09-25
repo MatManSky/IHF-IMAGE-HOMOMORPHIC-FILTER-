@@ -191,6 +191,25 @@ def _crop(data: list, n: int, m: int) -> list:
     return [row[:m] for row in data[:n]]
 
 
+def _print_dataset(label: str, data) -> None:
+    """
+    Печатает содержимое массива (вход, фильтр, выход).
+    Массив выводится построчно и до последнего элемента,
+    полный вывод включается ключом --verbose.
+
+    У комплексных чисел печатаются действительная часть и модуль.
+    """
+    array = np.asarray(data)
+    print(f"{label}: shape={array.shape}")
+    with np.printoptions(threshold=np.inf, precision=4, suppress=True,
+                         linewidth=240):
+        print(array)
+        if np.iscomplexobj(array):
+            print("  modul:")
+            print(np.abs(array))
+    print()
+
+
 class homomorphic_filter:
     """
     Пример использования:
@@ -213,14 +232,19 @@ class homomorphic_filter:
     ):
         # Пара ФНЧ и ФВЧ должна быть согласована
         if not (
-            lf_filter.startswith("lp_")
-            and hf_filter == "hp_" + lf_filter[len("lp_"):]
+            (
+                lf_filter.startswith("lp_")
+                and hf_filter == "hp_" + lf_filter[len("lp_"):]
+            )
+            or lf_filter == "allpass" 
+            or hf_filter == "allpass"
         ):
             raise ValueError(
                 f"Несогласованная пара фильтров: '{lf_filter}' + '{hf_filter}'. "
                 f"Ожидается lp_X и hp_X одной семьи, например "
                 f"'{filtration.DEFAULT_LF_FILTER}' + "
-                f"'{filtration.DEFAULT_HF_FILTER}'."
+                f"'{filtration.DEFAULT_HF_FILTER}', либо 'allpass' с любым "
+                f"фильтром."
             )
         self._lf_filter = lf_filter
         self._hf_filter = hf_filter
@@ -253,11 +277,42 @@ class homomorphic_filter:
         Возвращает:
             numpy.ndarray: результат в формате входной матрицы (int64)
         """
+        return self._apply(image, pad, window, verbose=False)
+
+    # apply с отладочным выводом 
+    def apply_info(
+        self,
+        image: np.ndarray,
+        pad: str = None,
+        window: str = None,
+    ) -> np.ndarray:
+        return self._apply(image, pad, window, verbose=True)
+
+    # Функция гомоморфной фильтрации (общая реализация для apply/apply_info)
+    def _apply(
+        self,
+        image: np.ndarray,
+        pad: str,
+        window: str,
+        verbose: bool,
+    ) -> np.ndarray:
         _setup_precision()
         n, m = image.shape
 
+        step = 0
+
+        def report(label: str, data) -> None:
+            #Пронумеровать и вывести датасет (для apply_info)
+            nonlocal step
+            if verbose:
+                step += 1
+                _print_dataset(f"{step}. {label}", data)
+
+        report("input I", image)
+
         # 1. Логарифмирование
         log_data = self._logarithm(image)
+        report("log2(I)", log_data)
 
         # Окно и дополнение до степени двойки
         window_matrix = (
@@ -265,11 +320,14 @@ class homomorphic_filter:
         )
         if window_matrix is not None:
             log_data = _mul_rows(log_data, window_matrix)
+            report(f"multiplication by window '{window}'", log_data)
         if pad is not None:
             log_data = _pad_to_power_of_two(log_data, pad)
+            report(f"addition to the power of two ('{pad}')", log_data)
 
         # 2. Прямое БПФ
         spectrum = _fft_2d(log_data, inverse=False)
+        report("FFT", spectrum)
 
         # 3. Обработка спектра
         size = (len(log_data), len(log_data[0]))
@@ -277,6 +335,10 @@ class homomorphic_filter:
             self._lf_filter, *size, **self._filter_params)  # ФНЧ
         hf_matrix = filtration.get_filter(
             self._hf_filter, *size, **self._filter_params)  # ФВЧ
+        report(f"AFC LPF '{self._lf_filter}' "
+               f"(lf_gain={float(self._lf_gain):g})", lf_matrix)
+        report(f"AFC HPF '{self._hf_filter}' "
+               f"(hf_gain={float(self._hf_gain):g})", hf_matrix)
 
         lf_spectrum = [
             # Спектр * функция фильтра * коэф. усиления
@@ -291,17 +353,22 @@ class homomorphic_filter:
             [lf + hf for lf, hf in zip(lf_row, hf_row)]
             for lf_row, hf_row in zip(lf_spectrum, hf_spectrum)
         ]
+        report("Spectr after processing", spectrum)
 
         # 4. Обратное БПФ
         restored = _fft_2d(spectrum, inverse=True)
+        report("inverse FFT", restored)
 
         # Антидополнение до степени двойки и компенсация окна
         restored = _crop(restored, n, m)
+        report("opposite padding", restored)
         if window_matrix is not None:
             restored = _div_rows(restored, window_matrix)
+            report(f"division by window '{window}'", restored)
 
         # 5-6. Антилогарифмирование и округление для вывода
         result = self._antilogarithm(restored, n, m)
+        report("exp2 and rounding", result)
 
         return result
 
