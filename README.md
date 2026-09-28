@@ -1,14 +1,13 @@
 # IHF-IMAGE-HOMOMORPHIC-FILTER-
 Homomorphic image filtering using arbitrary-precision arithmetic (MPFR, 256-bit).
 
-**Версия: 0.30** — реализована базовая модель (a basic model has been implemented):
+**Версия: 0.35** — реализована базовая модель (a basic model has been implemented):
 `I = E·R` → `log2` → F → разделение спектра на НЧ- и ВЧ-компоненты
 (spectrum split into LF and HF parts) → обработка частей
-(part processing) → соединение → F^-1 → `exp2` → округление (rounding).  
-Цветной фильтр (color filter, `color_filter.py`): поканальная обработка R, G, B
-(each channel processed independently).  
+(part processing) → соединение → F^-1 → `exp2` → округление (rounding).   
 Обработка фотографий (photo processing, `photo.py`).  
-Код будет расширяться (The code will expand.).
+Код будет расширяться (The code will expand).
+В разработке стабильная версия обработки цветных фотографий. Планируется добавление полноценных тестов, новых возможностей, введение оптимизаций и т.д.
 
 ## Требования (Requirements)
 
@@ -127,11 +126,7 @@ python examples/bw_image.py   # examples/pic1.png -> examples/pic1_processed.png
 
 ## Системные зависимости (System dependencies)
 
-`gmpy2` — единственная зависимость с нативным кодом, и начиная с версии 2.3.1 он
-ставится готовым колесом (Windows, macOS, Linux; CPython 3.9–3.15), так что на
-Windows достаточно `pip install -r requirements.txt`. Если колеса для вашей
-платформы нет и pip собирает gmpy2 из исходников, сборка падает без заголовков
-`libgmp`, `libmpfr` и `libmpc` — их устанавливают команды ниже:  
+Если сборка падает из-за отсутствия `libgmp`, `libmpfr` и `libmpc` — их устанавливают команды ниже:  
 (If building `gmpy2` from sources fails, install the headers of GMP, MPFR and MPC)
 
 **Debian / Ubuntu:**
