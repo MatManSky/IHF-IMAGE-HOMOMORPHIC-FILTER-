@@ -20,6 +20,9 @@ import filtration
 # Точность: 256 бит ~ 80 десятичных знаков
 _PRECISION_BITS = 256
 
+# Нижняя граница яркости, чтобы log2(x<0) превращался в log2(MIN_VALUE).
+MIN_VALUE = 1.0
+
 
 def _setup_precision() -> None:
     """Установить точность MPFR-контекста."""
@@ -374,9 +377,18 @@ class homomorphic_filter:
 
     def _logarithm(self, image: np.ndarray) -> list:
         """
-        Логарифмирование по основанию 2
+        Логарифмирование по основанию 2.
         """
-        rows = np.asarray(image, dtype=np.float64).tolist()
+        arr = np.asarray(image, dtype=np.float64)
+        count = int((arr <= 0).sum())
+        if count:
+            print(
+                f"log2: поднято до MIN_VALUE={MIN_VALUE:g} неположительных "
+                f"пикселов: {count} (минимум входа = {arr.min():g})"
+            )
+            arr = np.maximum(arr, MIN_VALUE)
+
+        rows = arr.tolist()
         return [[mpc(gmpy2.log2(mpfr(v))) for v in row] for row in rows]
 
     def _antilogarithm(self, data: list, n: int, m: int) -> np.ndarray:

@@ -17,10 +17,9 @@ import numpy as np
 from PIL import Image
 
 import filtration
-from filter import homomorphic_filter
+from filter import homomorphic_filter, MIN_VALUE
 
-# Нижняя граница яркости
-MIN_VALUE = 1.0
+# Нижняя граница яркости MIN_VALUE объявлена в filter.py
 
 # Границы растяжки диапазона
 LOW_PERCENTILE = 0.5
@@ -43,27 +42,39 @@ def write_gray(path, values: np.ndarray) -> None:
     Image.fromarray(values, mode="L").save(path)
 
 
+def _limits(values: np.ndarray, low: float, high: float) -> tuple[float, float]:
+    # Границы диапазона: low/high — перцентили; None — min/max (выбросы не отсекаются).
+    if low is None and high is None:
+        return values.min(), values.max()
+    if low is None:
+        low = 0.0
+    if high is None:
+        high = 100.0
+    return np.percentile(values, [low, high])
+
+
 def _no_stretch(values: np.ndarray) -> np.ndarray:
-    # Без изменений (только округление и обрезка).
+    # Без изменений
     return values
 
 
-def _percentile_stretch(values: np.ndarray) -> np.ndarray:
-    # Линейная растяжка
-    lo = np.percentile(values, LOW_PERCENTILE)
-    hi = np.percentile(values, HIGH_PERCENTILE)
+def _percentile_stretch(values: np.ndarray,
+                        low: float = LOW_PERCENTILE,
+                        high: float = HIGH_PERCENTILE) -> np.ndarray:
+    # Линейная растяжка отсечек low/high до 0..255.
+    lo, hi = _limits(values, low, high)
     if hi <= lo:
-        return np.zeros_like(values, dtype=np.float64)
+        return values
     return (values - lo) * (255.0 / (hi - lo))
 
 
-def _gamma_stretch(values: np.ndarray, gamma: float = GAMMA_DEFAULT) -> np.ndarray:
-    # Гамма-коррекция
-    vmin = values.min()
-    vmax = values.max()
-    if vmax <= vmin:
-        return np.zeros_like(values, dtype=np.float64)
-    normalized = (values - vmin) / (vmax - vmin)
+def _gamma_stretch(values: np.ndarray, gamma: float = GAMMA_DEFAULT,
+                   low: float = None, high: float = None) -> np.ndarray:
+    # Гамма-коррекция после нормировки
+    lo, hi = _limits(values, low, high)
+    if hi <= lo:
+        return values
+    normalized = np.clip((values - lo) / (hi - lo), 0.0, 1.0)
     return 255.0 * np.power(normalized, 1.0 / gamma)
 
 
@@ -126,8 +137,11 @@ class photo_filter:
         Параметры:
             values: матрица результата apply (диапазон не ограничен 0..255)
             output: "percentile" — линейная растяжка (по умолчанию),
-                    "no" — только округление и обрезка,
+                    "no" — только обрезка к 0..255,
                     "gamma" — гамма-коррекция после нормировки к [0, 1]
+            **params: параметры выбранного режима:
+                    "percentile": low, high — перцентили-отсечки;
+                    "gamma": gamma, low, high.
         """
         if output not in _output_types:
             raise ValueError(
@@ -136,6 +150,11 @@ class photo_filter:
             )
         policy_of = _output_types[output]
         declared = inspect.signature(policy_of).parameters
-        scaled = policy_of(np.asarray(values, dtype=np.float64),
-                           **{k: v for k, v in params.items() if k in declared})
+        unknown = sorted(set(params) - set(declared))
+        if unknown:
+            raise ValueError(
+                f"Режим '{output}' не принимает параметры: {unknown}. "
+                f"Доступны: {sorted(declared)}."
+            )
+        scaled = policy_of(np.asarray(values, dtype=np.float64), **params)
         return np.clip(np.floor(scaled + 0.5), 0, 255).astype(np.uint8)

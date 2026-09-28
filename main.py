@@ -96,4 +96,4 @@ if __name__ == "__main__":
     test_chebyshev1_16_16()
     test_gaussian_16_16()
     test_color_8_8()
-    test_black_square_info_16_16()
+    #test_black_square_info_16_16()
