@@ -1,7 +1,8 @@
 """
 Модуль для обработки фотографий
 
-    1. читает и записывает файл с фотографией в формате PNG/JPEG — read_gray, write_gray;
+    1. читает и записывает файл с фотографией в формате PNG/JPEG — read_gray,
+       write_gray для ч/б кадра и read_rgb, write_rgb для цветного;
     2. поднимает яркость пикселов до MIN_VALUE, так как log2(0) не определён;
     3. exp2 после усиления ВЧ даёт значения далеко за 255, а в файл нужен
        8 бит — to_uint8 переводит значения в 0..255 способом _output_types
@@ -29,17 +30,27 @@ GAMMA_DEFAULT = 2.2
 
 
 def read_gray(path) -> np.ndarray:
-    """
-    Прочитать изображение как одноканальную матрицу float64 формы (n, m).
-    """
+    # Прочитать изображение как одноканальную матрицу float64 формы (n, m).
     with Image.open(path) as picture:
         values = np.asarray(picture.convert("L"), dtype=np.float64)
     return np.maximum(values, MIN_VALUE)
 
 
 def write_gray(path, values: np.ndarray) -> None:
-    """Записать матрицу uint8 формы (n, m)"""
+    # Записать матрицу uint8 формы (n, m)
     Image.fromarray(values, mode="L").save(path)
+
+
+def read_rgb(path) -> np.ndarray:
+    # Прочитать изображение как трёхканальную матрицу float64 формы (n, m, 3).
+    with Image.open(path) as picture:
+        values = np.asarray(picture.convert("RGB"), dtype=np.float64)
+    return np.maximum(values, MIN_VALUE)
+
+
+def write_rgb(path, values: np.ndarray) -> None:
+    # Записать матрицу uint8 для RGB (n, m, 3) 
+    Image.fromarray(values, mode="RGB").save(path)
 
 
 def _limits(values: np.ndarray, low: float, high: float) -> tuple[float, float]:

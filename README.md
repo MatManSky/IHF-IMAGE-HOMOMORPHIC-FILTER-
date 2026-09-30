@@ -1,133 +1,176 @@
 # IHF-IMAGE-HOMOMORPHIC-FILTER-
-Homomorphic image filtering using arbitrary-precision arithmetic (MPFR, 256-bit).
 
-**Версия: 0.35** — реализована базовая модель (a basic model has been implemented):
-`I = E·R` → `log2` → F → разделение спектра на НЧ- и ВЧ-компоненты
-(spectrum split into LF and HF parts) → обработка частей
-(part processing) → соединение → F^-1 → `exp2` → округление (rounding).   
-Обработка фотографий (photo processing, `photo.py`).  
-Код будет расширяться (The code will expand).
-В разработке стабильная версия обработки цветных фотографий. Планируется добавление полноценных тестов, новых возможностей, введение оптимизаций и т.д.
+Гомоморфная фильтрация изображений в арифметике произвольной точности  
+(Homomorphic image filtering using arbitrary-precision arithmetic).
+
+**Версия: 0.40**
+
+Базовая модель (basic model): `I = E·R` → `log2` → F → разделение спектра на НЧ и ВЧ
+(spectrum split into LF and HF parts) → обработка частей (part processing) →
+соединение → F^-1 → `exp2` → округление (rounding).
+
+Реализовано (implemented): базовая модель, обработка ЧБ- и цветных фотографий
+(grayscale and color photo processing). В планах (planned): тесты (tests),
+оптимизациии и расширения (optimizations and extension).
 
 ## Требования (Requirements)
 
 - Python **3.10+**
+- numpy, gmpy2, Pillow (`requirements.txt`)
 - Windows, Linux или macOS
 
-## Установка и запуск (Installation and Launch)
+## Установка (Installation)
 
-### Windows
+Создать виртуальное окружение (create virtual environment)
+```bash
+python3 -m venv .venv
+```
+
+Активировать окружение (activate the environment):
 
 ```powershell
-# Создать и активировать виртуальное окружение (create and activate virtual environment)
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-
-# Установить зависимости (install dependencies)
-pip install -r requirements.txt
-
-# Запустить тесты (run tests)
-python main.py
-python examples/bw_image.py
+.venv\Scripts\Activate.ps1          # Windows (PowerShell)
 ```
 
-### Linux
-
 ```bash
-# Создать и активировать виртуальное окружение (create and activate virtual environment)
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Установить зависимости (install dependencies)
-pip install -r requirements.txt
-
-# Запустить тесты (run tests)
-python main.py
-python examples/bw_image.py
+source .venv/bin/activate           # Linux / macOS
 ```
 
-### macOS
+Установить зависимости (install dependencies):
+```bash
+pip install -r requirements.txt
+```
+Запуск (run):
 
 ```bash
-# Создать и активировать виртуальное окружение (create and activate virtual environment)
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Установить зависимости (install dependencies)
-pip install -r requirements.txt
-
-# Запустить тесты (run tests)
-python main.py
-python examples/bw_image.py
+python main.py                      # тесты фильтра (filter tests)
+python examples/bw_image.py         # ЧБ-фотография (grayscale photo)
+python examples/color_image.py      # цветная фотография (color photo)
 ```
 
 ## Использование (Usage)
 
+### Матрица синтетического изображения (Synthetic image matrix)
+
 ```python
-import numpy as np
 from image import create_image
 from filter import homomorphic_filter
 
-# E — освещение (int 1..255), R — отражение (float (1/255, 1]), I = E*R
-# (E — illumination (int 1..255), R — reflection (float (1/255, 1]), I = E*R)
+# E — освещение (int 1..255), R — отражение (float (R_MIN, 1]), I = E*R
+# (E — illumination, R — reflection, I = E*R)
 e, r, i = create_image("const", "chess", 64, 64)
 
-# Усиление ВЧ и ослабление НЧ (HF emphasis, LF suppression)
+# Ослабление НЧ и усиление ВЧ (LF suppression, HF emphasis)
 f = homomorphic_filter(lf_gain=0.5, hf_gain=2.0)
-filtered = f.apply(i) # результат: int64 (result: int64)
-
-# Цветное изображение (n, m, 3): фильтр применяется к каждому каналу
-# (Color image (n, m, 3): the filter is applied to each channel)
-from color_filter import color_homomorphic_filter
-
-# Создаём три канала изображения (Create three image channels):
-i_r = create_image("const", "chess", 64, 64)[2]      # канал R (R channel)
-i_g = create_image("sawtooth", "chess", 64, 64)[2]   # канал G (G channel)
-i_b = create_image("triangular", "chess", 64, 64)[2] # канал B (B channel)
-
-color = np.stack([i_r, i_g, i_b], axis=2)  # shape (64, 64, 3)
-filtered_color = color_homomorphic_filter(lf_gain=0.5, hf_gain=2.0).apply(color)
-
-# Фотография из файла (A photo from a file)
-from photo import photo_filter, read_gray, write_gray
-
-photo = read_gray("examples/pic1.png")             # float64 (n, m), значения (values) > 0
-f = photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30.0)   # pad="reflect" по умолчанию (default)
-write_gray("out.png", f.to_uint8(f.apply(photo)))      # перевод к 8 бит (8 bit conversion)
+filtered = f.apply(i)
 ```
 
-Фильтры выбираются в конструкторе (Filters are selected in the constructor):
-`lf_filter` — ФНЧ (LPF), `hf_filter` — ФВЧ (HPF), пара в сумме даёт 1 (the pair sums to 1);
-`lf_gain`/`hf_gain` — усиления НЧ/ВЧ частей (LF/HF part gains).
-Типы фильтров (filter types, `filtration.py`): `lp_butterworth`, `hp_butterworth`
-(Баттерворт / Butterworth), `lp_chebyshev1`, `hp_chebyshev1` (Чебышёв 1-го рода /
-Chebyshev type I), `lp_gaussian`, `hp_gaussian` (Гаусса / Gaussian),
-`allpass` (всепропускающий).
-Частота среза по умолчанию адаптивна (adaptive cutoff): `D0 = min(n,m)/4`;
-параметры фильтра (`d0`, `order`, `ripple_db`) задаются в конструкторе.
-(The filter parameters (`d0`, `order`, `ripple_db`) are set in the constructor)
+### Ч/б фотография (Grayscale photo)
 
-БПФ по Кули-Тьюки требует число элементов равное степени двойки, поэтому `apply(..., pad="zero"|"reflect")` дополняет кадр и отсекает дополнение после ОБПФ. Окна `hann`/`tukey` гасят разрыв на границе перед БПФ и компенсируются после ОБПФ: `f.apply(i, pad="reflect", window="tukey")`.  
-(The Cooley–Tukey FFT requires a number of elements equal to a power of two, so `apply(..., pad="zero"|"reflect")` pads the frame and cuts off the padding after the IFFT. The `hann`/`tukey` windows suppress the discontinuity at the boundary before the FFT and are compensated for after the IFFT: `f.apply(i, pad="reflect", window="tukey")`)
+```python
+from photo import photo_filter, read_gray, write_gray
 
-Типы матриц (types of matrices): E — `const`, `sawtooth`, `triangular`, `exponential`,
-`slow_changes`;
-R — `chess`, `const`, `random`.
+photo = read_gray("examples/pic1.png")               # float64 (n, m), значения (values) > 0
+f = photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30.0) # pad="reflect" по умолчанию (default)
+write_gray("out.png", f.to_uint8(f.apply(photo)))
+```
+
+### Цветная фотография (Сolor photo)
+
+Каналы обрабатываются раздельно (channels are processed separately).
+
+```python
+from photo import photo_filter, read_rgb, write_rgb
+from color_filter import color_homomorphic_filter
+
+photo = read_rgb("examples/pic3_small.png")  # float64 (n, m, 3), RGB, альфа отбрасывается
+
+# Усиления можно задавать по каналам: скаляр или (R, G, B)
+# (gains: a scalar or one value per channel)
+f = color_homomorphic_filter(lf_gain=(0.99, 1.0, 1.01), hf_gain=1.0, pad="reflect")
+write_rgb("out.png", photo_filter.to_uint8(f.apply(photo)))
+```
+
+`lf_gain` по каналам меняет **освещённость** (цвет света), `hf_gain` —
+**коэффициент отражения** (детали), согласно модели `I = E·R`:
+в логарифмах низкие частоты — это `E`, высокие — `R`.
+
+«Холоднее» (colder): `(0.99, 1.0, 1.01)`.
+
+### Перевод в 8 бит (`to_uint8`)
+
+Результат `apply` не ограничен диапазоном 0..255, поэтому перед записью нужен
+перевод (the result is not limited to 0..255, so conversion is required):
+
+| `output` | что делает (what it does) | параметры (params) |
+|---|---|---|
+| `"percentile"` (по умолчанию / default) | линейная растяжка отсечек до 0..255 (linear stretch) | `low=0.5`, `high=99.5` — перцентили |
+| `"no"` | только обрезка к 0..255 (clipping only; округление уже сделал фильтр) | — |
+| `"gamma"` | гамма-коррекция после нормировки к [0, 1] (gamma after normalization) | `gamma=2.2`, `low`, `high` (`None` = min/max) |
+
+```python
+photo_filter.to_uint8(filtered)                       # растяжка по перцентилям
+photo_filter.to_uint8(filtered, output="no")          # сохранить значения как есть
+photo_filter.to_uint8(filtered, output="gamma", gamma=1.8, low=0.5, high=99.5)
+```
+
+Неизвестный режим или параметр чужого режима — `ValueError` со списком
+доступных (unknown mode or parameter raises `ValueError`).
+
+У цветного кадра перцентили берутся по **всем каналам сразу** (The color frame has percentiles across all channels at once.).
+
+### Отладка (debug)
+
+`apply_info` печатает все стадии обработки построчно (prints every pipeline stage):
+
+```python
+homomorphic_filter("allpass", "allpass", 1.0, 0.0).apply_info(i)
+```
+
+## Фильтры, дополнение, окна (Filters, Padding, Windows)
+
+Фильтры выбираются в конструкторе (selected in the constructor): `lf_filter` —
+ФНЧ (LPF), `hf_filter` — ФВЧ (HPF), пара в сумме даёт 1 (the pair sums to 1);
+`lf_gain`/`hf_gain` — усиления НЧ/ВЧ частей (LF/HF gains).
+
+Типы (types, `filtration.py`): `lp_butterworth`, `hp_butterworth` (Баттерворт /
+Butterworth), `lp_chebyshev1`, `hp_chebyshev1` (Чебышёв 1-го рода / Chebyshev
+type I), `lp_gaussian`, `hp_gaussian` (Гаусса / Gaussian), `allpass`
+(всепропускающий / all-pass).
+
+Частота среза по умолчанию адаптивна (adaptive cutoff): `d0 = None` →
+`min(n, m)/4`; значение задаётся **в пикселях**. Параметры `d0`, `order`,
+`ripple_db` (неравномерность АЧХ Чебышёва) — в конструкторе `homomorphic_filter`.
+
+БПФ по Кули-Тьюки требует длины, равной степени двойки, поэтому
+`apply(..., pad="zero"|"reflect")` дополняет кадр и отсекает дополнение после
+ОБПФ. Окна `hann`/`tukey` гасят разрыв на границе перед БПФ и компенсируются
+после ОБПФ: `f.apply(i, pad="reflect", window="tukey")`.
+
+Яркость неположительных пикселов поднимается до `MIN_VALUE = 1`, так как
+`log2(x <= 0)` не определён; факт подъёма печатается в консоль (non-positive
+pixels are lifted to MIN_VALUE and reported).
+
+## Типы матриц (Matrix Types)
+
+- **E** (освещение / illumination): `const`, `sawtooth`, `triangular`,
+  `exponential`, `slow_changes`
+- **R** (отражение / reflection): `chess`, `const`, `random`, `black_square`,
+  `white_square`
+- **I** (интенсивность / intensity) получается из (is obtained from) **E** и (and) **R**: `I = E·R`
 
 ## Примеры (Examples)
 
-### ЧБ-фотография в mpfr (Real grayscale photo, `examples/bw_image.py`)
+| Скрипт (script) | Вход → выход (in → out) | Что показывает (what it shows) |
+|---|---|---|
+| `examples/bw_image.py` | `pic1.png` → `pic1_processed.png` | ЧБ-фото, `lf_gain=0.75`, `hf_gain=2.0`, растяжка по умолчанию |
+| `examples/color_image.py` | `pic3_small.png` → `pic3_small_cold.png` | цвет, освещение холоднее: `lf_gain=(0.99, 1.0, 1.01)` |
 
-```powershell
-python examples/bw_image.py   # examples/pic1.png -> examples/pic1_processed.png
-```
-Кадр 3264x1840 дополняется до 4096x2048 и обрабатывается mpfr за несколько
-минут (several minutes of computation).
+## Системные зависимости (System Dependencies)
 
-## Системные зависимости (System dependencies)
-
-Если сборка падает из-за отсутствия `libgmp`, `libmpfr` и `libmpc` — их устанавливают команды ниже:  
-(If building `gmpy2` from sources fails, install the headers of GMP, MPFR and MPC)
+Если сборка `gmpy2` из исходников падает из-за отсутствия заголовков `libgmp`,
+`libmpfr` и `libmpc`, их устанавливают команды ниже (if building gmpy2 from
+sources fails, install the headers of GMP, MPFR and MPC):
 
 **Debian / Ubuntu:**
 ```bash
@@ -146,12 +189,16 @@ sudo pacman -S --needed gmp mpfr libmpc
 ```bash
 brew install gmp mpfr libmpc
 ```
+
 ## Благодарности (Acknowledgements)
 
-Благодарю Константина Францевича Глассмана за консультации по гомоморфной фильтрации и обработке изображений.  
-Благодарю glasgio за возможность использовать в качестве валидации результатов https://github.com/glasgio/homomorphic-filter  
-(I thank Konstantin Frantsevich Glassman for his consultations on homomorphic filtering and image processing.  
-I thank glasgio for the opportunity to use https://github.com/glasgio/homomorphic-filter as a validation of the results)
+Благодарю Константина Францевича Глассмана за консультации по гомоморфной
+фильтрации и обработке изображений.
+Благодарю glasgio за возможность использовать в качестве валидации результатов
+https://github.com/glasgio/homomorphic-filter
+(I thank Konstantin Frantsevich Glassman for his consultations on homomorphic
+filtering and image processing. I thank glasgio for the opportunity to use
+https://github.com/glasgio/homomorphic-filter as a validation of the results)
 
 ## Лицензия (License)
 
