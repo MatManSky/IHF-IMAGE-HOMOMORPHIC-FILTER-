@@ -23,7 +23,10 @@
 
 Создать виртуальное окружение (create virtual environment)
 ```bash
-python3 -m venv .venv
+python -m venv .venv # Windows (PowerShell)
+```
+```bash
+python3 -m venv .venv # Linux / macOS
 ```
 
 Активировать окружение (activate the environment):

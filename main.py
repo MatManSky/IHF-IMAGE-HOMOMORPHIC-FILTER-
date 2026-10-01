@@ -10,11 +10,25 @@
 """
 
 import numpy as np
+import sys
 from image import (
     create_image,
 )
 from filter import homomorphic_filter
 from color_filter import color_homomorphic_filter
+
+
+def _setup_console() -> None:
+    # Переключить консоль Windows в UTF-8 для кириллицы
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        ctypes.windll.kernel32.SetConsoleCP(65001)
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except (AttributeError, OSError):
+        pass
 
 
 def _print_matrix(label: str, matrix: np.ndarray) -> None:
@@ -91,6 +105,7 @@ def test_color_8_8() -> None:
 
 
 if __name__ == "__main__":
+    _setup_console()
     test_identity_16_16()
     test_butterworth_16_16()
     test_chebyshev1_16_16()
