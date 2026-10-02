@@ -139,6 +139,10 @@ def _fft_2d(data: list, inverse: bool = False) -> list:
 
 _WINDOW_FLOOR = mpfr(0.05) # Нижний предел окна
 
+# Допустимые режимы дополнения кадра до степени двойки
+_PAD_MODES = ("zero", "reflect")
+
+
 def _next_power_of_two(size: int) -> int:
     """Нужно для БПФ по Кули-Тьюки"""
     return 1 << (size - 1).bit_length()
@@ -167,6 +171,11 @@ def _pad_to_power_of_two(data: list, mode: str = "zero") -> list:
     1) "zero": нулями в лог области;
     2) "reflect": зеркально, с повтором края.
     """
+    if mode not in _PAD_MODES:
+        raise ValueError(
+            f"Неизвестный режим дополнения: '{mode}'. "
+            f"Доступные: {sorted(_PAD_MODES)}."
+        )
     rows, cols = len(data), len(data[0])
     target_rows = _next_power_of_two(rows)
     target_cols = _next_power_of_two(cols)
