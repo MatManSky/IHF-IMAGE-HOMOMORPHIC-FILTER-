@@ -61,7 +61,7 @@ def _fft_1d(x: list, inverse: bool = False) -> list:
     Одномерное БПФ по алгоритму Кули-Тьюки (radix-2, итеративный)
 
     Требует длину, равную степени двойки; иначе — долгий прямой расчёт ДПФ.
-    Можно реализовать другой БПФ, чтобы работал быстрее, но пока ограничимся таким.
+    Можно реализовать другой БПФ, чтобы работал быстрее, пока ограничимся таким.
     (Выполняется интеративно (без рекурсии), так как на Python так быстрее)
     Этапы:
         1. Бит-реверс перестановка: элементы переставляются так,
@@ -144,12 +144,12 @@ _PAD_MODES = ("zero", "reflect")
 
 
 def _next_power_of_two(size: int) -> int:
-    """Нужно для БПФ по Кули-Тьюки"""
+    # Нужно для БПФ по Кули-Тьюки
     return 1 << (size - 1).bit_length()
 
 
 def _mul_rows(data: list, weights: list) -> list:
-    """Поэлементное умножение двух матриц"""
+    # Поэлементное умножение двух матриц
     return [
         [v * w for v, w in zip(row, weight_row)]
         for row, weight_row in zip(data, weights)
@@ -157,7 +157,7 @@ def _mul_rows(data: list, weights: list) -> list:
 
 
 def _div_rows(data: list, weights: list) -> list:
-    """Компенсация окна: деление, ограниченное снизу _WINDOW_FLOOR"""
+    # Компенсация окна: деление, ограниченное снизу _WINDOW_FLOOR
     return [
         [v / (w if w > _WINDOW_FLOOR else _WINDOW_FLOOR)
          for v, w in zip(row, weight_row)]
@@ -281,13 +281,17 @@ class homomorphic_filter:
         (обработка в mpfr без промежуточных округлений)
 
         Параметры:
-            image: входная матрица (numpy.ndarray, значения > 0)
+            image: входная матрица формы (n, m), значения > 0
+                   (numpy.ndarray; список списков приводится к ndarray)
             pad: "zero" — дополнить кадр нулями до степени двойки,
                  "reflect" — дополнить зеркально; 
             window: имя окна из filtration, после ОБПФ окно компенсируется
 
         Возвращает:
             numpy.ndarray: результат в формате входной матрицы (int64)
+
+        Исключения:
+            ValueError: если форма входной матрицы не (n, m)
         """
         return self._apply(image, pad, window, verbose=False)
 
@@ -309,6 +313,12 @@ class homomorphic_filter:
         verbose: bool,
     ) -> np.ndarray:
         _setup_precision()
+        image = np.asarray(image)
+        if image.ndim != 2:
+            raise ValueError(
+                f"Ожидается одноканальное изображение формы (n, m), "
+                f"получена форма {image.shape}"
+            )
         n, m = image.shape
 
         step = 0
@@ -385,9 +395,7 @@ class homomorphic_filter:
         return result
 
     def _logarithm(self, image: np.ndarray) -> list:
-        """
-        Логарифмирование по основанию 2.
-        """
+        # Логарифмирование по основанию 2.
         arr = np.asarray(image, dtype=np.float64)
         count = int((arr <= 0).sum())
         if count:
@@ -401,9 +409,7 @@ class homomorphic_filter:
         return [[mpc(gmpy2.log2(mpfr(v))) for v in row] for row in rows]
 
     def _antilogarithm(self, data: list, n: int, m: int) -> np.ndarray:
-        """
-        Антилогарифмирование exp2 и округление к ближайшему целому
-        """
+        # Антилогарифмирование exp2 и округление к ближайшему целому  
         result = np.zeros((n, m), dtype=np.int64)
 
         for i in range(n):

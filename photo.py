@@ -5,8 +5,9 @@
        write_gray для ч/б кадра и read_rgb, write_rgb для цветного;
     2. поднимает яркость пикселов до MIN_VALUE, так как log2(0) не определён;
     3. exp2 после усиления ВЧ даёт значения далеко за 255, а в файл нужен
-       8 бит — to_uint8 переводит значения в 0..255 способом _output_types
-       (по умолчанию линейная растяжка).
+       фиксированный диапазон — to_uint8, to_uint12, to_uint16 переводят
+       значения в 0..2^bits-1 способом _output_types (по умолчанию линейная
+       растяжка).
 
 Кадр дополняется до степени двойки (pad="reflect" по умолчанию), так как
 это нужно для БПФ по методу Кули-Тьюки.
@@ -28,17 +29,53 @@ HIGH_PERCENTILE = 99.5
 
 GAMMA_DEFAULT = 2.2
 
+# Разрядность вывода: bits -> верх диапазона 0..MAX_UINT[bits].
+# 10- и 12-битного PNG нет, поэтому dtype для таких — uint16.
+# 16-битные TIFF и JPEG 2000 поддерживаются без проблем.
+MAX_UINT = {8: 255, 10: 1023, 12: 4095, 16: 65535}
+BITS_DEFAULT = 8
 
-def read_gray(path) -> np.ndarray:
-    # Прочитать изображение как одноканальную матрицу float64 формы (n, m).
+
+def read_gray(path, bits: int = BITS_DEFAULT) -> np.ndarray:
+    # Прочитать изображение как одноканальную матрицу float64 формы (n, m)
+    if bits not in MAX_UINT:
+        raise ValueError(
+            f"Неизвестная разрядность: {bits}. Доступные: {sorted(MAX_UINT)}."
+        )
     with Image.open(path) as picture:
-        values = np.asarray(picture.convert("L"), dtype=np.float64)
+        if picture.mode == "I;16":
+            values = np.asarray(picture, dtype=np.uint16)
+            if picture.format == "PNG" and bits < 16:
+                values = values >> (16 - bits)
+            values = values.astype(np.float64)
+        else:
+            values = np.asarray(picture.convert("L"), dtype=np.float64)
     return np.maximum(values, MIN_VALUE)
 
 
-def write_gray(path, values: np.ndarray) -> None:
-    # Записать матрицу uint8 формы (n, m)
-    Image.fromarray(values, mode="L").save(path)
+SHIFT_TO_TOP = (".PNG",)
+
+
+def write_gray(path, values: np.ndarray, bits: int = BITS_DEFAULT) -> None:
+    """
+    Записать матрицу яркости в файл.
+
+    Параметры:
+        path: путь к файлу (расширение выбирает контейнер)
+        values: результат to_uint8 (uint8) или to_uint12/to_uint16 (uint16)
+        bits: разрядность значений values — 8, 12 или 16
+    """
+    if bits not in MAX_UINT:
+        raise ValueError(
+            f"Неизвестная разрядность: {bits}. Доступные: {sorted(MAX_UINT)}."
+        )
+    if bits == 8:
+        Image.fromarray(values, mode="L").save(path)
+        return
+    values = np.clip(np.asarray(values), 0, MAX_UINT[bits]).astype(np.uint16)
+    if str(path).upper().endswith(SHIFT_TO_TOP):
+        values = values << (16 - bits)
+    Image.fromarray(values).save(path)
 
 
 def read_rgb(path) -> np.ndarray:
@@ -49,7 +86,15 @@ def read_rgb(path) -> np.ndarray:
 
 
 def write_rgb(path, values: np.ndarray) -> None:
-    # Записать матрицу uint8 для RGB (n, m, 3) 
+    # Записать матрицу uint8 для RGB (n, m, 3). Цветной кадр
+    # записывается по 8 бит на канал (8*3=24)
+    values = np.asarray(values)
+    if values.dtype != np.uint8:
+        raise ValueError(
+            f"Цветной кадр записывается в 8 бит,"
+            f"передан dtype {values.dtype}: "
+            f"нужен photo_filter.to_uint8"
+        )
     Image.fromarray(values, mode="RGB").save(path)
 
 
@@ -64,29 +109,30 @@ def _limits(values: np.ndarray, low: float, high: float) -> tuple[float, float]:
     return np.percentile(values, [low, high])
 
 
-def _no_stretch(values: np.ndarray) -> np.ndarray:
+def _no_stretch(values: np.ndarray, maximum: float) -> np.ndarray:
     # Без изменений
     return values
 
 
-def _percentile_stretch(values: np.ndarray,
+def _percentile_stretch(values: np.ndarray, maximum: float,
                         low: float = LOW_PERCENTILE,
                         high: float = HIGH_PERCENTILE) -> np.ndarray:
-    # Линейная растяжка отсечек low/high до 0..255.
+    # Линейная растяжка отсечек low/high до 0..maximum.
     lo, hi = _limits(values, low, high)
     if hi <= lo:
         return values
-    return (values - lo) * (255.0 / (hi - lo))
+    return (values - lo) * (maximum / (hi - lo))
 
 
-def _gamma_stretch(values: np.ndarray, gamma: float = GAMMA_DEFAULT,
+def _gamma_stretch(values: np.ndarray, maximum: float,
+                   gamma: float = GAMMA_DEFAULT,
                    low: float = None, high: float = None) -> np.ndarray:
     # Гамма-коррекция после нормировки
     lo, hi = _limits(values, low, high)
     if hi <= lo:
         return values
     normalized = np.clip((values - lo) / (hi - lo), 0.0, 1.0)
-    return 255.0 * np.power(normalized, 1.0 / gamma)
+    return maximum * np.power(normalized, 1.0 / gamma)
 
 
 _output_types = {
@@ -96,6 +142,33 @@ _output_types = {
 }
 
 OUTPUT_DEFAULT = "percentile"
+
+
+def _to_uint(values: np.ndarray, bits: int, output: str,
+             **params) -> np.ndarray:
+    # Общий перевод результата фильтра в bits бит (0..MAX_UINT[bits])
+    if bits not in MAX_UINT:
+        raise ValueError(
+            f"Неизвестная разрядность: {bits}. Доступные: {sorted(MAX_UINT)}."
+        )
+    if output not in _output_types:
+        raise ValueError(
+            f"Неизвестный режим вывода: '{output}'. "
+            f"Доступные: {sorted(_output_types)}."
+        )
+    policy_of = _output_types[output]
+    declared = [name for name in inspect.signature(policy_of).parameters
+                if name not in ("values", "maximum")]
+    unknown = sorted(set(params) - set(declared))
+    if unknown:
+        raise ValueError(
+            f"Режим '{output}' не принимает параметры: {unknown}. "
+            f"Доступны: {sorted(declared)}."
+        )
+    maximum = float(MAX_UINT[bits])
+    scaled = policy_of(np.asarray(values, dtype=np.float64), maximum, **params)
+    clipped = np.clip(np.floor(scaled + 0.5), 0, maximum)
+    return clipped.astype(np.uint8 if bits == 8 else np.uint16)
 
 
 class photo_filter:
@@ -143,7 +216,7 @@ class photo_filter:
     def to_uint8(values: np.ndarray, output: str = OUTPUT_DEFAULT,
                  **params) -> np.ndarray:
         """
-        Перевести результат фильтра в 8 бит
+        Перевести результат фильтра в 8 бит (0..255, dtype uint8)
 
         Параметры:
             values: матрица результата apply (диапазон не ограничен 0..255)
@@ -154,18 +227,16 @@ class photo_filter:
                     "percentile": low, high — перцентили-отсечки;
                     "gamma": gamma, low, high.
         """
-        if output not in _output_types:
-            raise ValueError(
-                f"Неизвестный режим вывода: '{output}'. "
-                f"Доступные: {sorted(_output_types)}."
-            )
-        policy_of = _output_types[output]
-        declared = inspect.signature(policy_of).parameters
-        unknown = sorted(set(params) - set(declared))
-        if unknown:
-            raise ValueError(
-                f"Режим '{output}' не принимает параметры: {unknown}. "
-                f"Доступны: {sorted(declared)}."
-            )
-        scaled = policy_of(np.asarray(values, dtype=np.float64), **params)
-        return np.clip(np.floor(scaled + 0.5), 0, 255).astype(np.uint8)
+        return _to_uint(values, 8, output, **params)
+
+    @staticmethod
+    def to_uint12(values: np.ndarray, output: str = OUTPUT_DEFAULT,
+                  **params) -> np.ndarray:
+        # Вывод в 12 бит (0..4095, dtype uint16)
+        return _to_uint(values, 12, output, **params)
+
+    @staticmethod
+    def to_uint16(values: np.ndarray, output: str = OUTPUT_DEFAULT,
+                  **params) -> np.ndarray:
+        # Вывод в 16 бит (0..65535, dtype uint16)
+        return _to_uint(values, 16, output, **params)

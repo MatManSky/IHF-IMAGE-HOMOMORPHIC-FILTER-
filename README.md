@@ -3,7 +3,7 @@
 Гомоморфная фильтрация изображений в арифметике произвольной точности  
 (Homomorphic image filtering using arbitrary-precision arithmetic).
 
-**Версия: 0.40**
+**Версия: 0.45**
 
 Базовая модель (basic model): `I = E·R` → `log2` → F → разделение спектра на НЧ и ВЧ
 (spectrum split into LF and HF parts) → обработка частей (part processing) →
@@ -100,23 +100,24 @@ write_rgb("out.png", photo_filter.to_uint8(f.apply(photo)))
 
 «Холоднее» (colder): `(0.99, 1.0, 1.01)`.
 
-### Перевод в 8 бит (`to_uint8`)
+### Перевод в N бит (`to_uint8`, `to_uint12`, `to_uint16`)
 
 Результат `apply` не ограничен диапазоном 0..255, поэтому перед записью нужен
 перевод (the result is not limited to 0..255, so conversion is required):
 
 | `output` | что делает (what it does) | параметры (params) |
 |---|---|---|
-| `"percentile"` (по умолчанию / default) | линейная растяжка отсечек до 0..255 (linear stretch) | `low=0.5`, `high=99.5` — перцентили |
-| `"no"` | только обрезка к 0..255 (clipping only; округление уже сделал фильтр) | — |
+| `"percentile"` (по умолчанию / default) | линейная растяжка отсечек до верхней границы (linear stretch) | `low=0.5`, `high=99.5` — перцентили |
+| `"no"` | только обрезка к диапазону (clipping only; округление уже сделал фильтр) | — |
 | `"gamma"` | гамма-коррекция после нормировки к [0, 1] (gamma after normalization) | `gamma=2.2`, `low`, `high` (`None` = min/max) |
 
 ```python
-photo_filter.to_uint8(filtered)                       # растяжка по перцентилям
-photo_filter.to_uint8(filtered, output="no")          # сохранить значения как есть
+photo_filter.to_uint8(filtered)                 # растяжка по перцентилям
+photo_filter.to_uint8(filtered, output="no")    # сохранить значения как есть
 photo_filter.to_uint8(filtered, output="gamma", gamma=1.8, low=0.5, high=99.5)
 ```
 
+Режимы вывода отличаются только верхней границей `0..2^bits-1`, формулы общие.
 Неизвестный режим или параметр чужого режима — `ValueError` со списком
 доступных (unknown mode or parameter raises `ValueError`).
 
