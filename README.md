@@ -3,7 +3,7 @@
 Гомоморфная фильтрация изображений в арифметике произвольной точности  
 (Homomorphic image filtering using arbitrary-precision arithmetic).
 
-**Версия: 0.45**
+**Версия: 0.50**
 
 Базовая модель (basic model): `I = E·R` → `log2` → F → разделение спектра на НЧ и ВЧ
 (spectrum split into LF and HF parts) → обработка частей (part processing) →
@@ -100,7 +100,7 @@ write_rgb("out.png", photo_filter.to_uint8(f.apply(photo)))
 
 «Холоднее» (colder): `(0.99, 1.0, 1.01)`.
 
-### Перевод в N бит (`to_uint8`, `to_uint12`, `to_uint16`)
+### Перевод в N бит (`to_uint8`, `to_uint10`, `to_uint12`, `to_uint16`)
 
 Результат `apply` не ограничен диапазоном 0..255, поэтому перед записью нужен
 перевод (the result is not limited to 0..255, so conversion is required):
@@ -122,6 +122,21 @@ photo_filter.to_uint8(filtered, output="gamma", gamma=1.8, low=0.5, high=99.5)
 доступных (unknown mode or parameter raises `ValueError`).
 
 У цветного кадра перцентили берутся по **всем каналам сразу** (The color frame has percentiles across all channels at once.).
+
+### Шумоподавление (`denoise`, по умолчанию выключено)
+
+Используется билатерный фильтр:
+
+```python
+from photo import photo_filter, denoise, read_gray, write_gray
+
+out = photo_filter.to_uint8(filtered)
+write_gray("out.png", denoise(out, True))                  # включено
+write_gray("out.png", denoise(out, True, radius=3, sigma_range=25.0))
+```
+
+`enabled` по умолчанию `DENOISE_DEFAULT = False` — кадр возвращается как есть.
+Считается в float64 — mpfr на этом шаге избыточен.
 
 ### Отладка (debug)
 
@@ -169,6 +184,9 @@ pixels are lifted to MIN_VALUE and reported).
 |---|---|---|
 | `examples/bw_image.py` | `pic1.png` → `pic1_processed.png` | ЧБ-фото, `lf_gain=0.75`, `hf_gain=2.0`, растяжка по умолчанию |
 | `examples/color_image.py` | `pic3_small.png` → `pic3_small_cold.png` | цвет, освещение холоднее: `lf_gain=(0.99, 1.0, 1.01)` |
+
+В обоих примерах есть переменная `DENOISE = False` — шумоподавление готового
+кадра (in both examples `DENOISE` toggles the final denoising pass).
 
 ## Системные зависимости (System Dependencies)
 

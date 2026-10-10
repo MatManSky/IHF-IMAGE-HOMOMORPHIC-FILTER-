@@ -19,7 +19,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from photo import photo_filter, read_rgb, write_rgb
+from photo import photo_filter, read_rgb, write_rgb, denoise
 from processing import balance, make_colder
 
 SRC_PATH = Path(__file__).with_name("pic3_small.png")
@@ -30,6 +30,7 @@ TEMPERATURE = 0.01  # шаг сдвига НЧ-части
 D0 = None
 ORDER = 2
 PAD = "reflect"
+DENOISE = False  # шумоподавление итогового кадра
 
 
 def main() -> None:
@@ -43,12 +44,13 @@ def main() -> None:
     print(f"mpfr 256 бит, pad={PAD}: {time.time() - t0:.0f} с")
     print(f"2. фильтрован: {balance(filtered.astype(np.float64))}")
 
-    out = photo_filter.to_uint8(filtered) # Растяжка совместная
+    out = denoise(photo_filter.to_uint8(filtered), DENOISE)  # Растяжка совместная
     print(f"3. вывод     : {balance(out.astype(np.float64))}")
 
     write_rgb(DST_PATH, out)
     print(f"Записан {DST_PATH.name}: {m}x{n} px, "
-          f"{DST_PATH.stat().st_size / 1000:.0f} КБ")
+          f"{DST_PATH.stat().st_size / 1000:.0f} КБ, "
+          f"шумоподавление {'вкл' if DENOISE else 'выкл'}")
 
 
 if __name__ == "__main__":

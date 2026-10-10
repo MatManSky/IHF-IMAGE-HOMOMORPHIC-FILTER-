@@ -13,7 +13,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from photo import photo_filter, read_gray, write_gray 
+from photo import photo_filter, read_gray, write_gray, denoise
 from filter import _print_dataset
 
 SRC_PATH = Path(__file__).with_name("pic1.png")
@@ -24,6 +24,7 @@ HF_GAIN = 2.0      # Усиление высоких частот (коэффи�
 D0 = 30.0          # частота среза, пикселей
 ORDER = 2
 PAD = "reflect"
+DENOISE = False    # шумоподавление итогового кадра
 
 
 def main() -> None:
@@ -40,11 +41,13 @@ def main() -> None:
     print(f"mpfr 256 бит, pad={PAD}: {time.time() - t0:.0f} с")
     #_print_dataset("2. filtered", filtered)
 
-    out = f.to_uint8(filtered)
+    out = denoise(f.to_uint8(filtered), DENOISE)
     write_gray(DST_PATH, out)
     #_print_dataset("3. output", out)
     print(f"Записан {DST_PATH.name}: {m}x{n} px, "
-          f"{DST_PATH.stat().st_size / 1000:.0f} КБ")
+          f"{DST_PATH.stat().st_size / 1000:.0f} КБ, "
+          f"шумоподавление {'вкл' if DENOISE else 'выкл'}")
+
 
 
 if __name__ == "__main__":

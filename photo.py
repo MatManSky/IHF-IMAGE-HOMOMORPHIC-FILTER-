@@ -5,13 +5,16 @@
        write_gray для ч/б кадра и read_rgb, write_rgb для цветного;
     2. поднимает яркость пикселов до MIN_VALUE, так как log2(0) не определён;
     3. exp2 после усиления ВЧ даёт значения далеко за 255, а в файл нужен
-       фиксированный диапазон — to_uint8, to_uint12, to_uint16 переводят
-       значения в 0..2^bits-1 способом _output_types (по умолчанию линейная
-       растяжка).
+       фиксированный диапазон — to_uint8, to_uint10, to_uint12, to_uint16
+       переводят значения в 0..2^bits-1 способом _output_types (по умолчанию
+       линейная растяжка);
+    4. по желанию убирает шум готового кадра — denoise (билатерный фильтр),
+       выключен по умолчанию.
 
 Кадр дополняется до степени двойки (pad="reflect" по умолчанию), так как
 это нужно для БПФ по методу Кули-Тьюки.
 """
+
 
 import inspect
 
@@ -19,9 +22,9 @@ import numpy as np
 from PIL import Image
 
 import filtration
-from filter import homomorphic_filter, MIN_VALUE
+from color_filter import CHANNELS # CHANNELS = 3
+from filter import homomorphic_filter, MIN_VALUE # MIN_VALUE = 1.0
 
-# Нижняя граница яркости MIN_VALUE объявлена в filter.py
 
 # Границы растяжки диапазона
 LOW_PERCENTILE = 0.5
@@ -62,7 +65,7 @@ def write_gray(path, values: np.ndarray, bits: int = BITS_DEFAULT) -> None:
 
     Параметры:
         path: путь к файлу (расширение выбирает контейнер)
-        values: результат to_uint8 (uint8) или to_uint12/to_uint16 (uint16)
+        values: результат to_uint8 (uint8) или to_uint10/to_uint12/to_uint16
         bits: разрядность значений values — 8, 12 или 16
     """
     if bits not in MAX_UINT:
@@ -230,6 +233,12 @@ class photo_filter:
         return _to_uint(values, 8, output, **params)
 
     @staticmethod
+    def to_uint10(values: np.ndarray, output: str = OUTPUT_DEFAULT,
+                  **params) -> np.ndarray:
+        # Перевести результат фильтра в 10 бит (0..1023, dtype uint16)
+        return _to_uint(values, 10, output, **params)
+
+    @staticmethod
     def to_uint12(values: np.ndarray, output: str = OUTPUT_DEFAULT,
                   **params) -> np.ndarray:
         # Вывод в 12 бит (0..4095, dtype uint16)
@@ -240,3 +249,109 @@ class photo_filter:
                   **params) -> np.ndarray:
         # Вывод в 16 бит (0..65535, dtype uint16)
         return _to_uint(values, 16, output, **params)
+
+# Шумоподавление: билатерный фильтр (ослабляет шум, не трогая границы)
+
+DENOISE_DEFAULT = False  # выключено: шумоподавление нужно не всегда
+DENOISE_RADIUS = 2          # окно (2*radius + 1)^2 = 5x5
+DENOISE_SIGMA_SPACE = 1.0   # спад веса с расстоянием, пикселы
+DENOISE_SIGMA_RANGE = 15.0  # спад веса с разностью яркости, отсчёты шкалы
+
+
+def bilateral(
+    values: np.ndarray,
+    radius: int = DENOISE_RADIUS,
+    sigma_space: float = DENOISE_SIGMA_SPACE,
+    sigma_range: float = DENOISE_SIGMA_RANGE,
+) -> np.ndarray:
+    """
+    Билатерный фильтр: среднее по окну, где вес соседа — произведение
+    гауссова веса по расстоянию (sigma_space) и гауссова веса по разности
+    яркостей (sigma_range).
+
+    Считается в float64: это последний шаг перед записью, целая шкала уже
+    выбрана, mpfr избыточна.
+
+    Параметры:
+        values: готовый кадр (n, m) или (n, m, 3) после to_uintN
+        radius: полуразмер окна, кадр обрабатывается окном (2*radius + 1)^2
+        sigma_space: вес соседа на расстоянии d — гаусс с сигмой в пикселах
+        sigma_range: вес соседа с разностью яркости dr — в отсчётах шкалы
+                     вывода (15 для 8 бит, ~3850 для 16)
+        край кадра дополняется зеркально с повтором края (как pad="reflect")
+
+    Возвращает:
+        numpy.ndarray: кадр той же формы и dtype (целой dtype — с округлением
+                       к ближайшему и обрезкой диапазона)
+
+    Исключения:
+        ValueError: если форма не (n, m) и не (n, m, 3) или параметры невалидны
+
+    Цветной кадр фильтруется одним весом на все каналы: разность яркости —
+    сумма квадратов по каналам. Граница, заметная в одном канале, защищает от
+    размытия остальные.
+    """
+    if not isinstance(radius, (int, np.integer)) or radius < 1:
+        raise ValueError(f"radius={radius}: ожидается целое число >= 1")
+    if sigma_space <= 0 or sigma_range <= 0:
+        raise ValueError(
+            f"sigma_space={sigma_space}, sigma_range={sigma_range}: "
+            f"ожидается оба больше нуля"
+        )
+
+    source = np.asarray(values)
+    data = source.astype(np.float64)
+    if data.ndim == 2:
+        data = data[:, :, None]
+    elif data.ndim != 3 or data.shape[2] != CHANNELS:
+        raise ValueError(
+            f"Ожидается кадр формы (n, m) или (n, m, {CHANNELS}), "
+            f"получена форма {source.shape}"
+        )
+
+    n, m, channels = data.shape
+    padded = np.pad(data, ((radius, radius), (radius, radius), (0, 0)),
+                    mode="symmetric")
+    total = np.zeros((n, m, channels), dtype=np.float64)
+    weight_sum = np.zeros((n, m), dtype=np.float64)
+
+    for dy in range(-radius, radius + 1):
+        for dx in range(-radius, radius + 1):
+            space = (dy * dy + dx * dx) / (2.0 * sigma_space ** 2)
+            window = padded[radius + dy: radius + dy + n,
+                            radius + dx: radius + dx + m, :]
+            diff = window - data
+            # Один вес на все каналы: сумма квадратов разностей по каналам
+            range_sq = (diff * diff).sum(axis=2) / (2.0 * sigma_range ** 2)
+            weight = np.exp(-(space + range_sq))
+            total += window * weight[:, :, None]
+            weight_sum += weight
+
+    result = total / weight_sum[:, :, None]
+    if source.ndim == 2:
+        result = result[:, :, 0]
+    if not np.issubdtype(source.dtype, np.integer):
+        return result
+    limit = np.iinfo(source.dtype)
+    result = np.clip(np.floor(result + 0.5), max(limit.min, 0), limit.max)
+    return result.astype(source.dtype)
+
+
+def denoise(values: np.ndarray, enabled: bool = DENOISE_DEFAULT,
+            **params) -> np.ndarray:
+    """
+    Шумоподавление; enabled=False — кадр возвращается как есть.
+    Идёт ПОСЛЕ to_uint; sigma_range задан в отсчётах шкалы вывода
+
+    Параметры:
+        values: кадр после перевода в N бит
+        enabled: по умолчанию DENOISE_DEFAULT = False
+        **params: radius, sigma_space, sigma_range — как у bilateral
+
+    Возвращает:
+        numpy.ndarray: кадр той же формы и dtype
+    """
+    if not enabled:
+        return values
+    return bilateral(values, **params)
+
