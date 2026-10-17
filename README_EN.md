@@ -4,13 +4,13 @@
 
 ## Homomorphic image filtering using arbitrary-precision arithmetic  
 
-**Version**: 0.60
+**Version**: 0.70
 
 ## Model
 `I = E·R` → `log₂` → F → spectrum split into LF and HF components → per-component processing → recombination → F⁻¹ → `exp₂` → rounding.
 
-**Implemented**: the basic pipeline, grayscale and color photo processing.  
-**Planned**: tests, new optimizations and extensions.
+**Implemented**: the basic pipeline, grayscale and color photo processing,
+96 tests and partially documentation.
 
 ## Requirements
 
@@ -136,7 +136,7 @@ since `log₂(x ≤ 0)` is undefined; a warning is printed to the console.
 
 ## Matrix Types
 - `E` (illumination): `const`, `sawtooth`, `triangular`, `exponential`, `slow_changes`
-- `R` (reflectance): `chess`, `const`, `random`, `black_square`, `white_square`
+- `R` (reflectance): `chess`, `const`, `random`, `black_square`, `white_square`, `snowman`, `cat`
 - `I` (intensity) is obtained from `E` and `R` as `I = E·R`
 
 ## Examples
@@ -147,6 +147,36 @@ since `log₂(x ≤ 0)` is undefined; a warning is printed to the console.
 | `examples/color_image.py` | `pic3_small.png` → `pic3_small_cold.png` | Color, cooler illumination: `lf_gain=(0.99, 1.0, 1.01)` |
 
 Both examples contain a `DENOISE = False` flag controlling post-filter denoising of the resulting frame.
+
+## Documentation
+
+Schematics in the `docs/` directory:
+
+| File | What it shows |
+|---|---|
+| `docs/homomorphic_schema.png` | Filter core stages (log → FFT → LPF/HPF → IFFT → exp) |
+| `docs/photo_schema_bw.png` | Grayscale photo processing pipeline |
+| `docs/photo_schema_color.png` | Color photo processing pipeline |
+| `docs/architecture.png` | Module structure and dependencies |
+
+Schematics are generated from `docs/*.py`. To rebuild:
+```bash
+python docs/shema.py
+python docs/photo_shema.py
+python docs/architecture.py
+```
+
+## Tests
+
+```bash
+python -m pytest tests/ -q          # 96 tests
+python tests/test_all.py            # same without pytest
+```
+
+Tests verify the invariants of the `I = E·R` model: unity-gain transparency,
+FFT-to-DFT consistency, attribute recovery from frames, correctness of padding
+and windows, and photo processing. Synthetic test scenes are in
+`tests/synthetic_images.py`.
 
 ## System Dependencies
 If building `gmpy2` from source fails due to missing headers for `libgmp`, `libmpfr` and `libmpc`, install them with one of the commands below:
