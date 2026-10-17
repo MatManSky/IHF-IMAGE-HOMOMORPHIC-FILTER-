@@ -4,13 +4,13 @@
 
 ## Homomorphic image filtering using arbitrary-precision arithmetic  
 
-**Version**: 0.50
+**Version**: 0.60
 
 ## Model
 `I = E·R` → `log₂` → F → spectrum split into LF and HF components → per-component processing → recombination → F⁻¹ → `exp₂` → rounding.
 
 **Implemented**: the basic pipeline, grayscale and color photo processing.  
-**Planned**: tests, optimizations and extensions.
+**Planned**: tests, new optimizations and extensions.
 
 ## Requirements
 

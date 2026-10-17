@@ -23,22 +23,19 @@ def _allpass_matrix(n: int, m: int) -> list:
     one = mpfr(1)
     return [[one] * m for _ in range(n)]
 
+def _squared_distances(n: int, m: int) -> tuple:
+    """
+    Целые квадраты расстояний: du2 по строкам, dv2 по столбцам.
+    D(u,v) = sqrt(du^2 + dv^2), где du = min(u, n-u), dv = min(v, m-v)
+    """
+    du2 = [min(u, n - u) ** 2 for u in range(n)]
+    dv2 = [min(v, m - v) ** 2 for v in range(m)]
+    return du2, dv2
+
+
 def _distance_matrix(n: int, m: int) -> list:
-    """
-    Расстояние от частоты (u,v) до DC: D = sqrt(du^2 + dv^2),
-    где du = min(u, n-u), dv = min(v, m-v) — частоты зеркальна
-    относительно края матрицы
-    """
-    out = []
-    for u in range(n):
-        du2 = min(u, n - u)
-        du2 *= du2
-        row = []
-        for v in range(m):
-            dv = min(v, m - v)
-            row.append(gmpy2.sqrt(mpfr(du2 + dv * dv)))
-        out.append(row)
-    return out
+    # Расстояние от частоты (u,v) до DC
+    return _from_distance(n, m, lambda d: d)
 
 
 def _chebyshev_t(order: int, x) -> "mpfr":
@@ -58,8 +55,30 @@ def _chebyshev_t(order: int, x) -> "mpfr":
 def _from_distance(n: int, m: int, h_of_d) -> list:
     """
     Матрица H(u,v) = h(D(u,v)) — формула от расстояния до DC.
+
+    Значение зависит только от целого du^2 + dv^2.
+    Корень и вся формула считаются один раз на каждое
+    встреченное значение.
     """
-    return [[h_of_d(d) for d in dist_row] for dist_row in _distance_matrix(n, m)]
+    du2_list, dv2_list = _squared_distances(n, m)
+    d_cache: dict = {}
+    h_cache: dict = {}
+    out = []
+    for du2 in du2_list:
+        row = []
+        for dv2 in dv2_list:
+            key = du2 + dv2
+            h = h_cache.get(key)
+            if h is None:
+                d = d_cache.get(key)
+                if d is None:
+                    d = gmpy2.sqrt(mpfr(key))
+                    d_cache[key] = d
+                h = h_of_d(d)
+                h_cache[key] = h
+            row.append(h)
+        out.append(row)
+    return out
 
 
 def _complement(lp: list) -> list:

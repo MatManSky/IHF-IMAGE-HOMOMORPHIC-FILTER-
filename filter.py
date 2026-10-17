@@ -36,22 +36,75 @@ _setup_precision()
 # Допуск округления: 2^-100 ~ 8e-31, что выше, чем шаг данных ~ 1e-16
 _EPS = mpfr(2) ** mpfr(-100)
 
+# Граница для быстрого exp2 в float64
+_ROUND_MARGIN = 1e-9
+
+# Для оптимизации скорости вычислений
+_TWO_PI = 2 * gmpy2.const_pi()
+_TWIDDLE_CACHE: dict = {}   # (length, sign) -> множители уровня
+_ROOT_CACHE: dict = {}      # (n, sign)      -> корни из единицы
+_BITREV_CACHE: dict = {}    # n              -> пары индексов
+
+
+def _twiddle_table(length: int, sign: int) -> list:
+    # Множители exp(sign*2*pi*i/length) для i = 0..length/2-1
+    key = (length, sign)
+    table = _TWIDDLE_CACHE.get(key)
+    if table is None:
+        ang = sign * _TWO_PI / length
+        table = [mpc(gmpy2.cos(ang * k), gmpy2.sin(ang * k))
+                 for k in range(length // 2)]
+        _TWIDDLE_CACHE[key] = table
+    return table
+
+
+def _roots_of_unity(n: int, sign: int) -> list:
+    # Корни n-й степени exp(sign*2*pi*i*t/n), t = 0..n-1
+    key = (n, sign)
+    table = _ROOT_CACHE.get(key)
+    if table is None:
+        ang = sign * _TWO_PI / n
+        table = [mpc(gmpy2.cos(ang * t), gmpy2.sin(ang * t))
+                 for t in range(n)]
+        _ROOT_CACHE[key] = table
+    return table
+
+
+def _bitrev_swaps(n: int) -> list:
+    # Пары индексов бит-реверс перестановки (оптимизация)
+    swaps = _BITREV_CACHE.get(n)
+    if swaps is None:
+        swaps = []
+        j = 0
+        for i in range(1, n):
+            bit = n >> 1
+            while j & bit:
+                j ^= bit
+                bit >>= 1
+            j |= bit
+            if i < j:
+                swaps.append((i, j))
+        _BITREV_CACHE[n] = swaps
+    return swaps
+
 
 def _dft_1d(x: list, inverse: bool = False) -> list:
     """
-    Одномерное ДПФ
-
+    Одномерное дескретное преобразование Фурье:
     X[k] = sum_j x[j] * exp(±2*pi*i*j*k/n)
     """
     n = len(x)
     sign = 1 if inverse else -1
-    two_pi = 2 * gmpy2.const_pi()
+    w = _roots_of_unity(n, sign)
     out = []
     for k in range(n):
         s = mpc(0)
+        t = 0
         for j in range(n):
-            ang = sign * two_pi * j * k / n
-            s += x[j] * mpc(gmpy2.cos(ang), gmpy2.sin(ang))
+            s += x[j] * w[t]
+            t += k
+            if t >= n:      # k < n и t < n, значит t + k < 2n — одно вычитание
+                t -= n
         out.append(s)
     return out
 
@@ -61,14 +114,6 @@ def _fft_1d(x: list, inverse: bool = False) -> list:
     Одномерное БПФ по алгоритму Кули-Тьюки (radix-2, итеративный)
 
     Требует длину, равную степени двойки; иначе — долгий прямой расчёт ДПФ.
-    Можно реализовать другой БПФ, чтобы работал быстрее, пока ограничимся таким.
-    (Выполняется интеративно (без рекурсии), так как на Python так быстрее)
-    Этапы:
-        1. Бит-реверс перестановка: элементы переставляются так,
-           чтобы бабочки можно было выполнять «на месте»;
-        2. Бабочки: для длин 2, 4, ..., n спектры половинной длины
-           объединяются парами: (u + w*v, u - w*v),
-           где w — поворачивающий множитель exp(±2*pi*i*k/length).
     """
     n = len(x)
     if n & (n - 1) != 0:
@@ -77,34 +122,23 @@ def _fft_1d(x: list, inverse: bool = False) -> list:
     a = list(x)
 
     # 1. Бит-реверс перестановка
-    j = 0
-    for i in range(1, n):
-        bit = n >> 1
-        while j & bit:
-            j ^= bit
-            bit >>= 1
-        j |= bit
-        if i < j:
-            a[i], a[j] = a[j], a[i]
+    for i, j in _bitrev_swaps(n):
+        a[i], a[j] = a[j], a[i]
 
     # 2. Бабочки
     sign = 1 if inverse else -1
-    two_pi = 2 * gmpy2.const_pi()
     length = 2
     while length <= n:
         half = length // 2
-        ang = sign * two_pi / length
-        # Таблица множителей уровня: half вычислений cos/sin
-        # вместо n/2 (переиспользуется для всех блоков)
-        w_table = [
-            mpc(gmpy2.cos(ang * k), gmpy2.sin(ang * k))
-            for k in range(half)
-        ]
+        w_table = _twiddle_table(length, sign)
         for start in range(0, n, length):
-            for k in range(half):
-                w = w_table[k]
+            u = a[start]
+            v = a[start + half]
+            a[start] = u + v
+            a[start + half] = u - v
+            for k in range(1, half):
                 u = a[start + k]
-                v = a[start + k + half] * w
+                v = a[start + k + half] * w_table[k]
                 a[start + k] = u + v
                 a[start + k + half] = u - v
         length <<= 1
@@ -270,6 +304,34 @@ class homomorphic_filter:
             "ripple_db": ripple_db, # Неравномерность АЧХ Чебышёва-1 в полосе пропускания
         }
 
+        # Суммарная АЧХ (нужна для оптимизации)
+        self._response = None
+        self._response_size = None
+        self._response_parts = None
+
+    def _get_response(self, size: tuple, verbose: bool) -> tuple:
+        # S * (lf_gain*ФНЧ + hf_gain*ФВЧ)
+        if self._response_size != size or self._response is None:
+            lf_matrix = filtration.get_filter(
+                self._lf_filter, *size, **self._filter_params)
+            hf_matrix = filtration.get_filter(
+                self._hf_filter, *size, **self._filter_params)
+            lf_gain, hf_gain = self._lf_gain, self._hf_gain
+            self._response = [
+                [lf * lf_gain + hf * hf_gain for lf, hf in zip(l_row, h_row)]
+                for l_row, h_row in zip(lf_matrix, hf_matrix)
+            ]
+            self._response_size = size
+            self._response_parts = (lf_matrix, hf_matrix) if verbose else None
+        if verbose and self._response_parts is None:
+            self._response_parts = (
+                filtration.get_filter(self._lf_filter, *size,
+                                      **self._filter_params),
+                filtration.get_filter(self._hf_filter, *size,
+                                      **self._filter_params),
+            )
+        return self._response_parts, self._response
+
     def apply(
         self,
         image: np.ndarray,
@@ -353,27 +415,18 @@ class homomorphic_filter:
 
         # 3. Обработка спектра
         size = (len(log_data), len(log_data[0]))
-        lf_matrix = filtration.get_filter(
-            self._lf_filter, *size, **self._filter_params)  # ФНЧ
-        hf_matrix = filtration.get_filter(
-            self._hf_filter, *size, **self._filter_params)  # ФВЧ
-        report(f"AFC LPF '{self._lf_filter}' "
-               f"(lf_gain={float(self._lf_gain):g})", lf_matrix)
-        report(f"AFC HPF '{self._hf_filter}' "
-               f"(hf_gain={float(self._hf_gain):g})", hf_matrix)
+        parts, response = self._get_response(size, verbose)
+        if verbose:
+            lf_matrix, hf_matrix = parts
+            report(f"AFC LPF '{self._lf_filter}' "
+                   f"(lf_gain={float(self._lf_gain):g})", lf_matrix)
+            report(f"AFC HPF '{self._hf_filter}' "
+                   f"(hf_gain={float(self._hf_gain):g})", hf_matrix)
 
-        lf_spectrum = [
-            # Спектр * функция фильтра * коэф. усиления
-            [s * h * self._lf_gain for s, h in zip(row, matrix_row)]
-            for row, matrix_row in zip(spectrum, lf_matrix)
-        ]
-        hf_spectrum = [
-            [s * h * self._hf_gain for s, h in zip(row, matrix_row)]
-            for row, matrix_row in zip(spectrum, hf_matrix)
-        ]
         spectrum = [
-            [lf + hf for lf, hf in zip(lf_row, hf_row)]
-            for lf_row, hf_row in zip(lf_spectrum, hf_spectrum)
+            # Спектр * суммарная АЧХ
+            [s * h for s, h in zip(row, response_row)]
+            for row, response_row in zip(spectrum, response)
         ]
         report("Spectr after processing", spectrum)
 
@@ -405,16 +458,35 @@ class homomorphic_filter:
             )
             arr = np.maximum(arr, MIN_VALUE)
 
+        cache: dict = {}
         rows = arr.tolist()
-        return [[mpc(gmpy2.log2(mpfr(v))) for v in row] for row in rows]
+        out = []
+        for row in rows:
+            line = []
+            for v in row:
+                c = cache.get(v)
+                if c is None:
+                    c = mpc(gmpy2.log2(mpfr(v)))
+                    cache[v] = c
+                line.append(c)
+            out.append(line)
+        return out
 
     def _antilogarithm(self, data: list, n: int, m: int) -> np.ndarray:
-        # Антилогарифмирование exp2 и округление к ближайшему целому  
-        result = np.zeros((n, m), dtype=np.int64)
-
-        for i in range(n):
-            for j in range(m):
-                v = gmpy2.exp2(data[i][j].real)
-                result[i, j] = int(gmpy2.round_away(v + _EPS))
-
-        return result
+        # Антилогарифмирование exp2 и округление к ближайшему целому.
+        
+        vals = [v.real for row in data[:n] for v in row[:m]]
+        total = n * m
+        x = np.fromiter((float(v) for v in vals), dtype=np.float64,
+                        count=total)
+        with np.errstate(over="ignore", invalid="ignore"):
+            y = np.exp2(x)
+        ok = np.isfinite(y) & (y < 9.0e18)
+        ok &= np.abs(y - (np.floor(y) + 0.5)) > _ROUND_MARGIN * np.maximum(1.0, y)
+        out = np.floor(np.where(ok, y, 0.0) + 0.5).astype(np.int64)
+        exact = np.flatnonzero(~ok)
+        if exact.size:
+            exp2 = gmpy2.exp2
+            for i in exact:
+                out[i] = int(gmpy2.round_away(exp2(vals[int(i)]) + _EPS))
+        return out.reshape(n, m)
