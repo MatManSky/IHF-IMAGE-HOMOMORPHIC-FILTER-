@@ -12,37 +12,16 @@
   4. Модель I = E·R: коэффициент отражения восстанавливается как I / E;
   5. photo_filter и color_homomorphic_filter не падают и дают корректную форму.
 
-Ссылки оформлены по ГОСТ Р 7.0.100-2018.
-
 Ссылки:
- 1. Гонсалес, Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. —
-    Москва : Техносфера, 2005. — 1072 с. — ISBN 5-94836-028-8;
- 2. Cooley, J. W. An Algorithm for the Machine Calculation of Complex Fourier
-    Series / J. W. Cooley, J. W. Tukey // Mathematics of Computation. — 1965. —
-    Vol. 19, № 90. — P. 297—301. — DOI 10.1090/S0025-5718-1965-0178586-1;
- 3. Stockham, T. G. Image Processing in the Context of a Visual Model /
-    T. G. Stockham // Proceedings of the IEEE. — 1972. — Vol. 60, № 7. —
-    P. 828—842. — DOI 10.1109/PROC.1972.8743;
- 4. IEEE Std 754-2019 : IEEE Standard for Floating-Point Arithmetic. —
-    New York : IEEE, 2019. — 84 p. — DOI 10.1109/IEEESTD.2019.8766229;
- 5. Homomorphic filter / glasgio // GitHub : [сайт]. — URL:
-    https://github.com/glasgio/homomorphic-filter (дата обращения:
-    17.10.2026);
- 6. Андонов, В. Г. Влияние резкости изображения на оптимальный градиент
-    кривой тоновоспроизведения в кино и телевидении / В. Г. Андонов,
-    М. В. Антипин, К. Ф. Гласман;
- 7. Красильников, Н. Н. Цифровая обработка 2D- и 3D-изображений :
-    учеб. пособие / Н. Н. Красильников. — Санкт-Петербург :
-    БХВ-Петербург, 2011. — 608 с. : ил. — (Учебная литература для
-    вузов). — ISBN 978-5-9775-0700-4;
- 8. Сергиенко, А. Б. Цифровая обработка сигналов : учеб. пособие /
-    А. Б. Сергиенко. — 3-е изд. — Санкт-Петербург : БХВ-Петербург,
-    2011. — 756 с. : ил. — (Учебная литература для вузов). —
-    ISBN 978-5-9775-0606-9;
- 9. Oppenheim, A. V. Nonlinear Filtering of Multiplied and Convolved
-    Signals / A. V. Oppenheim, R. W. Schafer, T. G. Stockham // Proceedings
-    of the IEEE. — 1968. — Vol. 56, № 8. — P. 1264—1291. —
-    DOI 10.1109/PROC.1968.6570.
+ 1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.: Техносфера, 2005. 1072 с.;
+ 2. Cooley J.W. An Algorithm for the Machine Calculation of Complex Fourier Series / J.W. Cooley, J.W. Tukey // Mathematics of Computation. 1965, Vol. 19, No. 90. P. 297–301;
+ 3. Stockham T.G. Image Processing in the Context of a Visual Model // Proceedings of the IEEE. 1972, Vol. 60, No. 7. P. 828–842;
+ 4. IEEE Std 754-2019. IEEE Standard for Floating-Point Arithmetic. New York: IEEE, 2019. 84 p.;
+ 5. Homomorphic filter // GitHub. URL: https://github.com/glasgio/homomorphic-filter (дата обращения: 17.10.2026);
+ 6. Андонов В.Г. Влияние резкости изображения на оптимальный градиент кривой тоновоспроизведения в кино и телевидении / В.Г. Андонов, М.В. Антипин, К.Ф. Гласман;
+ 7. Красильников Н.Н. Цифровая обработка 2D- и 3D-изображений: учеб. пособие. СПб.: БХВ-Петербург, 2011. 608 с.;
+ 8. Сергиенко А.Б. Цифровая обработка сигналов: учеб. пособие. 3-е изд. СПб.: БХВ-Петербург, 2011. 756 с.;
+ 9. Oppenheim A.V. Nonlinear Filtering of Multiplied and Convolved Signals / A.V. Oppenheim, R.W. Schafer, T.G. Stockham // Proceedings of the IEEE. 1968, Vol. 56, No. 8. P. 1264–1291.
 """
 
 import os

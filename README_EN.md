@@ -178,6 +178,32 @@ FFT-to-DFT consistency, attribute recovery from frames, correctness of padding
 and windows, and photo processing. Synthetic test scenes are in
 `tests/synthetic_images.py`.
 
+## References
+
+References are given in their original language.
+
+1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.:
+   Техносфера, 2005. 1072 с.
+2. Cooley J.W. An Algorithm for the Machine Calculation of Complex Fourier
+   Series / J.W. Cooley, J.W. Tukey // Mathematics of Computation. 1965,
+   Vol. 19, No. 90. P. 297–301.
+3. Stockham T.G. Image Processing in the Context of a Visual Model //
+   Proceedings of the IEEE. 1972, Vol. 60, No. 7. P. 828–842.
+4. IEEE Std 754-2019. IEEE Standard for Floating-Point Arithmetic.
+   New York: IEEE, 2019. 84 p.
+5. Homomorphic filter // GitHub. URL:
+   https://github.com/glasgio/homomorphic-filter (accessed: 17.10.2026).
+6. Андонов В.Г. Влияние резкости изображения на оптимальный градиент
+   кривой тоновоспроизведения в кино и телевидении / В.Г. Андонов,
+   М.В. Антипин, К.Ф. Гласман.
+7. Красильников Н.Н. Цифровая обработка 2D- и 3D-изображений: учеб.
+   пособие. СПб.: БХВ-Петербург, 2011. 608 с.
+8. Сергиенко А.Б. Цифровая обработка сигналов: учеб. пособие. 3-е изд.
+   СПб.: БХВ-Петербург, 2011. 756 с.
+9. Oppenheim A.V. Nonlinear Filtering of Multiplied and Convolved Signals /
+   A.V. Oppenheim, R.W. Schafer, T.G. Stockham // Proceedings of the IEEE.
+   1968, Vol. 56, No. 8. P. 1264–1291.
+
 ## System Dependencies
 If building `gmpy2` from source fails due to missing headers for `libgmp`, `libmpfr` and `libmpc`, install them with one of the commands below:
 

@@ -12,13 +12,14 @@
     6. Округление к ближайшему целому с допуском погрешности обработки
 
 Ссылки:
- 1. Гонсалес, Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. —
-    Москва : Техносфера, 2005. — 1072 с. — ISBN 5-94836-028-8
- 2. Cooley, J. W. An Algorithm for the Machine Calculation of Complex Fourier
-    Series / J. W. Cooley, J. W. Tukey // Mathematics of Computation. — 1965. —
-    Vol. 19, № 90. — P. 297—301. — DOI 10.1090/S0025-5718-1965-0178586-1
- 3. IEEE Std 754-2019 : IEEE Standard for Floating-Point Arithmetic. —
-    New York : IEEE, 2019. — 84 p. — DOI 10.1109/IEEESTD.2019.8766229
+ 1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.:
+    Техносфера, 2005. 1072 с.;
+ 2. Cooley J.W. An Algorithm for the Machine Calculation of Complex Fourier
+    Series / J.W. Cooley, J.W. Tukey // Mathematics of Computation. 1965,
+    Vol. 19, No. 90. P. 297–301;
+ 3. Oppenheim A.V. Nonlinear Filtering of Multiplied and Convolved Signals /
+    A.V. Oppenheim, R.W. Schafer, T.G. Stockham // Proceedings of the IEEE.
+    1968, Vol. 56, No. 8. P. 1264–1291;
 """
 
 import numpy as np
