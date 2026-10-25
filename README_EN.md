@@ -4,7 +4,7 @@
 
 ## Homomorphic image filtering using arbitrary-precision arithmetic  
 
-**Version**: 0.70
+**Version**: 0.75
 
 ## Model
 `I = E·R` → `log₂` → F → spectrum split into LF and HF components → per-component processing → recombination → F⁻¹ → `exp₂` → rounding.

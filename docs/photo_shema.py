@@ -1,7 +1,7 @@
 """
 Схемы применения гомоморфного фильтра к фотографиям (две картинки):
 
-    photo_schema_bw.png     — чёрно-белый кадр (examples/bw_image.py)
+    photo_schema_bw.png     — кадр в оттенках серого (examples/bw_image.py)
     photo_schema_color.png  — цветной кадр     (examples/color_image.py)
 
 Перед генерацией — check_api(): имена, значения по умолчанию и dtype-цепочка
@@ -10,6 +10,7 @@
 
 Запуск:
     python docs/photo_shema.py            # пишет обе схемы в docs/
+    python docs/photo_shema.py --en       # + _en.png версии
     python docs/photo_shema.py --show     # и открывает окна просмотра
 """
 
@@ -23,8 +24,53 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-OUT_BW = Path(__file__).with_name("photo_schema_bw.png")
-OUT_COLOR = Path(__file__).with_name("photo_schema_color.png")
+_OUT_BW = Path(__file__).with_name("photo_schema_bw.png")
+_OUT_COLOR = Path(__file__).with_name("photo_schema_color.png")
+_OUT_BW_EN = Path(__file__).with_name("photo_schema_bw_en.png")
+_OUT_COLOR_EN = Path(__file__).with_name("photo_schema_color_en.png")
+
+LANGS = {
+    "ru": {
+        "bw": [
+            ("pic1.png\nфото на входе\n(PNG / JPEG)",             False),
+            ("read_gray (bits=8)\nчтение в float64,\nзначения ≥ 1",       False),
+            ("photo_filter.apply\nфильтр mpfr 256 бит,\nвыход int64, >255", False),
+            ("to_uint8\nперевод в 0..255,\nпо перцентили 0.5/99.5",        False),
+            ("denoise\n(билатерный фильтр)\nвыкл",              True),
+            ("write_gray (bits)\nзапись PNG/JPEG,\n10/12/16 → uint16",     False),
+        ],
+        "color": [
+            ("pic3_small.png\nфото на входе\n(PNG / JPEG)",               False),
+            ("read_rgb\nчтение в RGB,\nfloat64 (n, m, 3)",                False),
+            ("цветной фильтр\nпоканальный mpfr,\nусиления по (R, G, B)",  False),
+            ("to_uint8\nрастяжка совместная\nпо всем каналам",            False),
+            ("denoise\n(билатерный фильтр)\nвыкл",             True),
+            ("write_rgb\nзапись только 8 бит,\nиначе ValueError",         False),
+        ],
+        "temp": ("make_colder / make_warmer — опция\n"
+                 "lf_gain = (1−t, 1, 1+t): холоднее / теплее"),
+    },
+    "en": {
+        "bw": [
+            ("pic1.png\ninput photo\n(PNG / JPEG)",                     False),
+            ("read_gray (bits=8)\nread into float64,\nvalues ≥ 1",       False),
+            ("photo_filter.apply\n256-bit mpfr filter,\noutput int64, >255", False),
+            ("to_uint8\nconvert to 0..255,\nby percentile 0.5/99.5",      False),
+            ("denoise\n(bilateral filter)\ndisabled",              True),
+            ("write_gray (bits)\nwrite PNG/JPEG,\n10/12/16 → uint16",     False),
+        ],
+        "color": [
+            ("pic3_small.png\ninput photo\n(PNG / JPEG)",                 False),
+            ("read_rgb\nread into RGB,\nfloat64 (n, m, 3)",                False),
+            ("color filter\nper-channel mpfr,\ngains per (R, G, B)",      False),
+            ("to_uint8\njoint stretch\nacross all channels",             False),
+            ("denoise\n(bilateral filter)\ndisabled",                 True),
+            ("write_rgb\n8-bit only,\nelse ValueError",                  False),
+        ],
+        "temp": ("make_colder / make_warmer — option\n"
+                 "lf_gain = (1−t, 1, 1+t): cooler / warmer"),
+    },
+}
 
 BLACK = "black"
 WHITE = "white"
@@ -130,37 +176,29 @@ def save(ax, path):
     print(f"Записан {path.name}: {path.stat().st_size / 1000:.0f} КБ")
 
 
+def render(lang: str) -> None:
+    # Нарисовать обе схемы (RU или EN) и сохранить
+    L = LANGS[lang]
+    suffix = "" if lang == "ru" else "_en"
+
+    # examples/bw_image.py
+    ax = new_sheet((0.1, 17.6), (0.45, 1.95))
+    chain(ax, 1.2, L["bw"])
+    save(ax, Path(__file__).with_name(f"photo_schema_bw{suffix}.png"))
+
+    # examples/color_image.py
+    ax = new_sheet((0.1, 17.6), (0.45, 3.7))
+    chain(ax, 1.2, L["color"])
+    draw_box(ax, XS[2], 3.0, L["temp"], w=4.6, h=0.95, dashed=True)
+    arrow(ax, XS[2], 2.52, XS[2], 1.83, dashed=True)
+    save(ax, Path(__file__).with_name(f"photo_schema_color{suffix}.png"))
+
+
 check_api()
 
-# examples/bw_image.py
-ax = new_sheet((0.1, 17.6), (0.45, 1.95))
-chain(ax, 1.2, [
-    ("pic1.png\nфото на входе\n(PNG / JPEG)",             False),
-    ("read_gray (bits=8)\nчтение в float64,\nзначения ≥ 1",       False),
-    ("photo_filter.apply\nфильтр mpfr 256 бит,\nвыход int64, >255", False),
-    ("to_uint8\nперевод в 0..255,\nпо перцентили 0.5/99.5",        False),
-    ("denoise\n(билатерный фильтр)\nвыкл",              True),
-    ("write_gray (bits)\nзапись PNG/JPEG,\n10/12/16 → uint16",     False),
-])
-save(ax, OUT_BW)
-
-# examples/color_image.py
-ax = new_sheet((0.1, 17.6), (0.45, 3.7))
-chain(ax, 1.2, [
-    ("pic3_small.png\nфото на входе\n(PNG / JPEG)",               False),
-    ("read_rgb\nчтение в RGB,\nfloat64 (n, m, 3)",                False),
-    ("цветной фильтр\nпоканальный mpfr,\nусиления по (R, G, B)",  False),
-    ("to_uint8\nрастяжка совместная\nпо всем каналам",            False),
-    ("denoise\n(билатерный фильтр)\nвыкл",             True),
-    ("write_rgb\nзапись только 8 бит,\nиначе ValueError",         False),
-])
-
-draw_box(ax, XS[2], 3.0,
-         "make_colder / make_warmer — опция\n"
-         "lf_gain = (1−t, 1, 1+t): холоднее / теплее",
-         w=4.6, h=0.95, dashed=True)
-arrow(ax, XS[2], 2.52, XS[2], 1.83, dashed=True)
-save(ax, OUT_COLOR)
+render("ru")
+if "--en" in sys.argv:
+    render("en")
 
 if "--show" in sys.argv:
     plt.show()
