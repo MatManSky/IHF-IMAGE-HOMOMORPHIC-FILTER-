@@ -21,7 +21,8 @@ LANGS = {
                  "гомоморфной фильтрации",
         "main": ("main.py", "синтетические сцены\n(I = E·R)"),
         "tests": ("tests/test_all.py",
-                  "96 тестов инвариантов;\nsynthetic_images.py —\nсцены для тестов"),
+                  "96 тестов инвариантов;\nsynthetic_images.py —\n"
+                  "сцены для тестов"),
         "processing": ("processing.py", "temperature_gains (R, G, B)\n"
                                         "shift_temperature, balance,\n"
                                         "make_colder, make_warmer"),
@@ -38,23 +39,32 @@ LANGS = {
                               "photo_filter\n"
                               "to_uint8/10/12/16: no | percentile | gamma\n"
                               "bilateral, denoise — билатерный (выкл)"),
-        "filter_core": ("filter.py — ядро гомоморфной фильтрации (mpfr/mpc, 256 бит)",
-                        "homomorphic_filter: apply(image, pad, window), apply_info(...)\n"
-                        "стадии — как в shema.py: вход → log2 → окно + дополнение → прямое БПФ\n"
-                        "(Кули-Тьюки) → ФНЧ × lf_gain и ФВЧ × hf_gain → объединение (НЧ + ВЧ)\n"
-                        "→ обратное БПФ → анти-дополнение → exp2 → округление → выход int64\n"
-                        "pad = zero | reflect, окна hann | tukey (делятся после ОБПФ);\n"
+        "filter_core": ("filter.py — ядро гомоморфной фильтрации "
+                        "(mpfr/mpc, 256 бит)",
+                        "homomorphic_filter: apply(image, pad, window), "
+                        "apply_info(...)\n"
+                        "стадии — как в shema.py: вход → log2 → "
+                        "окно + дополнение → прямое БПФ\n"
+                        "(Кули-Тьюки) → ФНЧ × lf_gain и ФВЧ × hf_gain → "
+                        "объединение (НЧ + ВЧ)\n"
+                        "→ обратное БПФ → анти-дополнение → exp2 → "
+                        "округление → выход int64\n"
+                        "pad = zero | reflect, окна hann | tukey "
+                        "(делятся после ОБПФ);\n"
                         "MIN_VALUE = 1 поднимает неположительную яркость"),
         "filtration": ("filtration.py — функции частотной области (mpfr)",
-                       "get_filter: lp/hp Баттерворт · Чебышёв-1 · Гаусс · allpass "
+                       "get_filter: lp/hp Баттерворт · Чебышёв-1 · "
+                       "Гаусс · allpass "
                        "(ФВЧ = 1 − ФНЧ)\n"
                        "get_window: hann · tukey; частотная сетка D(u, v); "
                        "d0 = None → min(n, m)/4\n"
-                       "filter вызывает get_filter/get_window; color_filter, photo, "
+                       "filter вызывает get_filter/get_window; "
+                       "color_filter, photo, "
                        "processing берут имена и параметры по умолчанию"),
         "libs": ("Внешние библиотеки",
-                 "numpy — матрицы на входе и выходе (image, filter, color_filter, "
-                 "photo, processing) · gmpy2 (mpfr/mpc) — арифметика (filter, filtration)\n"
+                 "numpy — матрицы на входе и выходе (image, filter, "
+                 "color_filter, photo, processing) · gmpy2 (mpfr/mpc) — "
+                 "арифметика (filter, filtration)\n"
                  "Pillow — чтение и запись фото (photo) · matplotlib — только "
                  "схемы docs/"),
         "legend": "Пунктир — то, что не входит в релиз "
@@ -65,13 +75,15 @@ LANGS = {
                  "homomorphic image filtering",
         "main": ("main.py", "synthetic scenes\n(I = E·R)"),
         "tests": ("tests/test_all.py",
-                  "96 invariant tests;\nsynthetic_images.py —\nscene generators"),
+                  "96 invariant tests;\nsynthetic_images.py —\n"
+                  "scene generators"),
         "processing": ("processing.py", "temperature_gains (R, G, B)\n"
                                         "shift_temperature, balance,\n"
                                         "make_colder, make_warmer"),
         "bw_example": ("examples/bw_image.py", "BW: pic1.png →\n"
                                                "pic1_processed.png"),
-        "color_example": ("examples/color_image.py", "color: pic3_small.png →\n"
+        "color_example": ("examples/color_image.py",
+                          "color: pic3_small.png →\n"
                                                      "pic3_small_cold.png"),
         "image": ("image.py", "create_image() (E, R, I = E·R)\n"
                               "E and R types set"),
@@ -82,24 +94,34 @@ LANGS = {
                               "photo_filter\n"
                               "to_uint8/10/12/16: no | percentile | gamma\n"
                               "bilateral, denoise — bilateral (off)"),
-        "filter_core": ("filter.py — homomorphic filtering core (mpfr/mpc, 256 bit)",
-                        "homomorphic_filter: apply(image, pad, window), apply_info(...)\n"
-                        "stages — as in shema.py: input → log2 → window + padding → direct DFT\n"
-                        "(Cooley-Tukey) → LPF × lf_gain and HPF × hf_gain → combine (LF + HF)\n"
-                        "→ inverse DFT → anti-padding → exp2 → round → output int64\n"
-                        "pad = zero | reflect, windows hann | tukey (divided after IDFT);\n"
+        "filter_core": ("filter.py — homomorphic filtering core "
+                        "(mpfr/mpc, 256 bit)",
+                        "homomorphic_filter: apply(image, pad, window), "
+                        "apply_info(...)\n"
+                        "stages — as in shema.py: input → log2 → "
+                        "window + padding → direct DFT\n"
+                        "(Cooley-Tukey) → LPF × lf_gain and HPF × hf_gain "
+                        "→ combine (LF + HF)\n"
+                        "→ inverse DFT → anti-padding → exp2 → round "
+                        "→ output int64\n"
+                        "pad = zero | reflect, windows hann | tukey "
+                        "(divided after IDFT);\n"
                         "MIN_VALUE = 1 lifts non-positive brightness"),
         "filtration": ("filtration.py — frequency-domain functions (mpfr)",
-                       "get_filter: lp/hp Butterworth · Chebyshev-1 · Gaussian · allpass "
+                       "get_filter: lp/hp Butterworth · Chebyshev-1 · "
+                       "Gaussian · allpass "
                        "(HPF = 1 − LPF)\n"
                        "get_window: hann · tukey; frequency grid D(u, v); "
                        "d0 = None → min(n, m)/4\n"
-                       "filter calls get_filter/get_window; color_filter, photo, "
+                       "filter calls get_filter/get_window; "
+                       "color_filter, photo, "
                        "processing pick names and defaults"),
         "libs": ("External libraries",
                  "numpy — input/output matrices (image, filter, color_filter, "
-                 "photo, processing) · gmpy2 (mpfr/mpc) — arithmetic (filter, filtration)\n"
-                 "Pillow — photo read/write (photo) · matplotlib — docs/ schemes only"),
+                 "photo, processing) · gmpy2 (mpfr/mpc) — "
+                 "arithmetic (filter, filtration)\n"
+                 "Pillow — photo read/write (photo) · matplotlib — "
+                 "docs/ schemes only"),
         "legend": "Dashed — excluded from release "
                   "(external libraries)",
     },
@@ -126,7 +148,8 @@ def _render(lang: str, fig, ax) -> None:
     def draw_box(x, y, title, body="", w=3.4, h=1.4, fs=TITLE_FS, dashed=False,
                  body_dy=0.22):
         """
-        Скруглённый блок с мягкой тенью: заголовок (модуль) и тело (что делает).
+        Скруглённый блок с мягкой тенью: заголовок (модуль)
+        и тело (что делает).
         x, y — координаты центра.
         w, h — ширина и высота.
         dashed=True — блок вне релиза (тесты, внешние библиотеки).
@@ -168,7 +191,8 @@ def _render(lang: str, fig, ax) -> None:
 
     # Заголовок
     ax.text(10.5, 11.3, L["title"],
-            ha='center', va='center', fontsize=14, fontweight='bold', color=BLACK)
+            ha='center', va='center', fontsize=14, fontweight='bold',
+            color=BLACK)
 
     # Верхний ряд
     y0 = 9.7
@@ -196,7 +220,8 @@ def _render(lang: str, fig, ax) -> None:
 
     # Внешние библиотеки
     y4 = 0.62
-    draw_box(10.9, y4, *L["libs"], w=19.8, h=1.1, fs=10, dashed=True, body_dy=0.12)
+    draw_box(10.9, y4, *L["libs"], w=19.8, h=1.1, fs=10, dashed=True,
+             body_dy=0.12)
 
     # Зависимости
     arrow(2.7, y1 + 0.8, 2.7, y0 - 0.7)

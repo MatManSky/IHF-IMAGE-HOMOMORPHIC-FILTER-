@@ -56,7 +56,8 @@ def shift_temperature(
     return f.apply(image)
 
 
-def make_colder(image: np.ndarray, strength: float = 0.01, **params) -> np.ndarray:
+def make_colder(image: np.ndarray, strength: float = 0.01,
+                **params) -> np.ndarray:
     # Сделать освещение холоднее (R уменишить, B увеличить)
     if strength < 0:
         raise ValueError(
@@ -65,7 +66,8 @@ def make_colder(image: np.ndarray, strength: float = 0.01, **params) -> np.ndarr
     return shift_temperature(image, strength, **params)
 
 
-def make_warmer(image: np.ndarray, strength: float = 0.01, **params) -> np.ndarray:
+def make_warmer(image: np.ndarray, strength: float = 0.01,
+                **params) -> np.ndarray:
     # Сделать освещение теплее (R увеличить, B уменьшить)
     if strength < 0:
         raise ValueError(

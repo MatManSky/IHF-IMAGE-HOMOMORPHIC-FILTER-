@@ -32,40 +32,43 @@ _OUT_COLOR_EN = Path(__file__).with_name("photo_schema_color_en.png")
 LANGS = {
     "ru": {
         "bw": [
-            ("pic1.png\nфото на входе\n(PNG / JPEG)",             False),
-            ("read_gray (bits=8)\nчтение в float64,\nзначения ≥ 1",       False),
-            ("photo_filter.apply\nфильтр mpfr 256 бит,\nвыход int64, >255", False),
-            ("to_uint8\nперевод в 0..255,\nпо перцентили 0.5/99.5",        False),
+            ("pic1.png\nфото на входе\n(PNG / JPEG)", False),
+            ("read_gray (bits=8)\nчтение в float64,\nзначения ≥ 1", False),
+            ("photo_filter.apply\nфильтр mpfr 256 бит,\n"
+             "выход int64, >255", False),
+            ("to_uint8\nперевод в 0..255,\nпо перцентили 0.5/99.5", False),
             ("denoise\n(билатерный фильтр)\nвыкл",              True),
-            ("write_gray (bits)\nзапись PNG/JPEG,\n10/12/16 → uint16",     False),
+            ("write_gray (bits)\nзапись PNG/JPEG,\n10/12/16 → uint16", False),
         ],
         "color": [
-            ("pic3_small.png\nфото на входе\n(PNG / JPEG)",               False),
-            ("read_rgb\nчтение в RGB,\nfloat64 (n, m, 3)",                False),
-            ("цветной фильтр\nпоканальный mpfr,\nусиления по (R, G, B)",  False),
-            ("to_uint8\nрастяжка совместная\nпо всем каналам",            False),
+            ("pic3_small.png\nфото на входе\n(PNG / JPEG)", False),
+            ("read_rgb\nчтение в RGB,\nfloat64 (n, m, 3)", False),
+            ("цветной фильтр\nпоканальный mpfr,\n"
+             "усиления по (R, G, B)", False),
+            ("to_uint8\nрастяжка совместная\nпо всем каналам", False),
             ("denoise\n(билатерный фильтр)\nвыкл",             True),
-            ("write_rgb\nзапись только 8 бит,\nиначе ValueError",         False),
+            ("write_rgb\nзапись только 8 бит,\nиначе ValueError", False),
         ],
         "temp": ("make_colder / make_warmer — опция\n"
                  "lf_gain = (1−t, 1, 1+t): холоднее / теплее"),
     },
     "en": {
         "bw": [
-            ("pic1.png\ninput photo\n(PNG / JPEG)",                     False),
-            ("read_gray (bits=8)\nread into float64,\nvalues ≥ 1",       False),
-            ("photo_filter.apply\n256-bit mpfr filter,\noutput int64, >255", False),
-            ("to_uint8\nconvert to 0..255,\nby percentile 0.5/99.5",      False),
+            ("pic1.png\ninput photo\n(PNG / JPEG)", False),
+            ("read_gray (bits=8)\nread into float64,\nvalues ≥ 1", False),
+            ("photo_filter.apply\n256-bit mpfr filter,\n"
+             "output int64, >255", False),
+            ("to_uint8\nconvert to 0..255,\nby percentile 0.5/99.5", False),
             ("denoise\n(bilateral filter)\ndisabled",              True),
-            ("write_gray (bits)\nwrite PNG/JPEG,\n10/12/16 → uint16",     False),
+            ("write_gray (bits)\nwrite PNG/JPEG,\n10/12/16 → uint16", False),
         ],
         "color": [
-            ("pic3_small.png\ninput photo\n(PNG / JPEG)",                 False),
-            ("read_rgb\nread into RGB,\nfloat64 (n, m, 3)",                False),
-            ("color filter\nper-channel mpfr,\ngains per (R, G, B)",      False),
-            ("to_uint8\njoint stretch\nacross all channels",             False),
+            ("pic3_small.png\ninput photo\n(PNG / JPEG)", False),
+            ("read_rgb\nread into RGB,\nfloat64 (n, m, 3)", False),
+            ("color filter\nper-channel mpfr,\ngains per (R, G, B)", False),
+            ("to_uint8\njoint stretch\nacross all channels", False),
             ("denoise\n(bilateral filter)\ndisabled",                 True),
-            ("write_rgb\n8-bit only,\nelse ValueError",                  False),
+            ("write_rgb\n8-bit only,\nelse ValueError", False),
         ],
         "temp": ("make_colder / make_warmer — option\n"
                  "lf_gain = (1−t, 1, 1+t): cooler / warmer"),
@@ -119,7 +122,8 @@ def check_api() -> None:
     except ValueError:
         pass
 
-    print("API-проверка: OK — имена, дефолты и dtype-цепочка совпадают с кодом")
+    print("API-проверка: OK — имена, дефолты и dtype-цепочка "
+          "совпадают с кодом")
 
 
 figs = []

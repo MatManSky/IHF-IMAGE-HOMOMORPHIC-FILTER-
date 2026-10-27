@@ -1,8 +1,8 @@
 """
 Схема гомоморфного фильтра.
 
-Обработка фотографии целиком (чтение/запись, to_uintN, denoise) — в photo_shema.py,
-структура проекта — в architecture.py.
+Обработка фотографии целиком (чтение/запись, to_uintN, denoise) —
+в photo_shema.py, структура проекта — в architecture.py.
 
 Запуск:
     python docs/shema.py            # пишет docs/homomorphic_schema.png

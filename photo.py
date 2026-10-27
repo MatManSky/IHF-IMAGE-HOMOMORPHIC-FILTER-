@@ -101,8 +101,10 @@ def write_rgb(path, values: np.ndarray) -> None:
     Image.fromarray(values, mode="RGB").save(path)
 
 
-def _limits(values: np.ndarray, low: float, high: float) -> tuple[float, float]:
-    # Границы диапазона: low/high — перцентили; None — min/max (выбросы не отсекаются).
+def _limits(values: np.ndarray, low: float,
+            high: float) -> tuple[float, float]:
+    # Границы диапазона: low/high — перцентили; None — min/max
+    # (выбросы не отсекаются).
     if low is None and high is None:
         return values.min(), values.max()
     if low is None:

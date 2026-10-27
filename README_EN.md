@@ -2,46 +2,32 @@
 
 **English** / [Русский](README.md) 
 
-## Homomorphic image filtering using arbitrary-precision arithmetic  
+## Homomorphic image filtering using arbitrary-precision arithmetic
 
-**Version**: 0.75
+**Version**: 0.80
 
-## Model
-`I = E·R` → `log₂` → F → spectrum split into LF and HF components → per-component processing → recombination → F⁻¹ → `exp₂` → rounding.
+**Model**: `I = E·R` → `log₂` → F → spectrum split into LF and HF components → per-component processing → recombination → F⁻¹ → `exp₂` → rounding.
 
 **Implemented**: the basic pipeline, grayscale and color photo processing,
 96 tests and partially documentation.
 
-## Requirements
-
-- Python 3.10+
-- `numpy`, `gmpy2`, `Pillow` (see `requirements.txt`)
-- Windows, Linux or macOS
+![Homomorphic filter stages](docs/homomorphic_schema_en.png)
 
 ## Installation
 
-Create a virtual environment:
-```
-python -m venv .venv          # Windows (PowerShell)
-python3 -m venv .venv         # Linux / macOS
+```bash
+python -m venv .venv && pip install -r requirements.txt
 ```
 
-Activate the environment:
-```
-.venv\Scripts\Activate.ps1    # Windows (PowerShell)
-source .venv/bin/activate     # Linux / macOS
-```
-
-Install dependencies:
-```
-pip install -r requirements.txt
-```
+Details, virtual environment activation for Windows/Linux/macOS, and system
+dependencies (`libgmp`, `libmpfr`, `libmpc`) — see [INSTALL.md](INSTALL.md).
 
 ## Running
-```
+
+```bash
 python main.py                  # filter tests
-python examples/bw_image.py     # grayscale photo
-python examples/color_image.py  # color photo
+python examples/bw_image.py     # Grayscale photo
+python examples/color_image.py  # Color photo
 ```
 
 ## Usage
@@ -86,13 +72,16 @@ Per-channel `lf_gain` modulates illumination (the color of the light), while `hf
 "Cooler" tone: `(0.99, 1.0, 1.01)`.
 
 ### Conversion to N-bit integer (`to_uint8`, `to_uint10`, `to_uint12`, `to_uint16`)
+
 The result of `apply` is not bounded to `0..255`, so conversion is required before saving:
 
-| Output mode | What it does | Parameters |
-| --- | --- | --- |
-| `"percentile"` (default) | Linear stretch of percentiles to the upper bound | `low=0.5`, `high=99.5` — percentiles |
-| `"no"` | Clipping only (filter already performs rounding) | — |
-| `"gamma"` | Gamma correction after normalization to `[0, 1]` | `gamma=2.2`, `low`, `high` (`None` = min/max) |
+| Output mode | What it does |
+|---|---|
+| `"percentile"` (default) | Linear stretch of percentiles to the upper bound |
+| `"no"` | Clipping only (filter already performs rounding) |
+| `"gamma"` | Gamma correction after normalization to `[0, 1]` |
+
+Full parameter details — see [docs/filter_recomend.md](docs/filter_recomend.md).
 
 ```python
 photo_filter.to_uint8(filtered)                                    # percentile stretch
@@ -123,16 +112,14 @@ homomorphic_filter("allpass", "allpass", 1.0, 0.0).apply_info(i)
 ```
 
 ## Filters, Padding, Windows
-Filters are selected in the constructor: `lf_filter` — LPF, `hf_filter` — HPF; the pair sums to unity. `lf_gain` / `hf_gain` are the LF/HF gains.
 
-Types (`filtration.py`): `lp_butterworth`, `hp_butterworth` (Butterworth), `lp_chebyshev1`, `hp_chebyshev1` (Chebyshev type I), `lp_gaussian`, `hp_gaussian` (Gaussian), `allpass` (all-pass).
+Filter types (`filtration.py`): `lp_butterworth`/`hp_butterworth`,
+`lp_chebyshev1`/`hp_chebyshev1`, `lp_gaussian`/`hp_gaussian`, `allpass`.
+The LPF/HPF pair must be consistent: `HP = 1 − LP` from the same family.
 
-The cutoff frequency is adaptive by default: `d0 = None` → `min(n, m)/4`; the value is specified in pixels. Parameters `d0`, `order`, `ripple_db` (Chebyshev passband ripple) are set in the `homomorphic_filter` constructor.
-
-The Cooley–Tukey FFT requires a power-of-two length, so `apply(..., pad="zero"|"reflect")` pads the frame and trims the padding after the IFFT. `hann` / `tukey` windows suppress boundary discontinuities before the FFT and are compensated after the IFFT: `f.apply(i, pad="reflect", window="tukey")`.
-
-Pixel values that are non-positive are clamped to `MIN_VALUE = 1`,
-since `log₂(x ≤ 0)` is undefined; a warning is printed to the console.
+Details: cutoff frequency `d0`, order `order`, Chebyshev passband ripple
+`ripple_db`, padding methods (`pad="zero"|"reflect"`), windows (`hann`/`tukey`),
+MIN_VALUE — see [docs/filter_recomend.md](docs/filter_recomend.md).
 
 ## Matrix Types
 - `E` (illumination): `const`, `sawtooth`, `triangular`, `exponential`, `slow_changes`
@@ -146,25 +133,36 @@ since `log₂(x ≤ 0)` is undefined; a warning is printed to the console.
 | `examples/bw_image.py` | `pic1.png` → `pic1_processed.png` | Grayscale photo, `lf_gain=0.75`, `hf_gain=2.0`, default stretch |
 | `examples/color_image.py` | `pic3_small.png` → `pic3_small_cold.png` | Color, cooler illumination: `lf_gain=(0.99, 1.0, 1.01)` |
 
+Grayscale photo processing pipeline:
+
+![Grayscale photo](docs/photo_schema_bw_en.png)
+
+Color photo processing pipeline:
+
+![Color photo](docs/photo_schema_color_en.png)
+
 Both examples contain a `DENOISE = False` flag controlling post-filter denoising of the resulting frame.
 
 ## Documentation
 
-Schematics in the `docs/` directory:
+### Schematics
 
-| File | What it shows |
-|---|---|
-| `docs/homomorphic_schema.png` | Filter core stages (log → FFT → LPF/HPF → IFFT → exp) |
-| `docs/photo_schema_bw.png` | Grayscale photo processing pipeline |
-| `docs/photo_schema_color.png` | Color photo processing pipeline |
-| `docs/architecture.png` | Module structure and dependencies |
+Schematics in the `docs/` directory are generated from `docs/*.py`. To rebuild:
 
-Schematics are generated from `docs/*.py`. To rebuild:
 ```bash
-python docs/shema.py
-python docs/photo_shema.py
-python docs/architecture.py
+python docs/shema.py                 # RU version
+python docs/shema.py --en            # + EN version
+python docs/photo_shema.py           # RU versions (BW + color)
+python docs/photo_shema.py --en      # + EN versions
+python docs/architecture.py          # RU version
+python docs/architecture.py --en     # + EN version
 ```
+
+Module structure and dependencies:
+
+![Architecture](docs/architecture_en.png)
+
+Complete documentation for parameter configuration is still in development [docs/filter_recomend.md](docs/filter_recomend.md).
 
 ## Tests
 
@@ -172,6 +170,8 @@ python docs/architecture.py
 python -m pytest tests/ -q          # 96 tests
 python tests/test_all.py            # same without pytest
 ```
+
+Details — see [INSTALL.md](INSTALL.md).
 
 Tests verify the invariants of the `I = E·R` model: unity-gain transparency,
 FFT-to-DFT consistency, attribute recovery from frames, correctness of padding
@@ -183,7 +183,7 @@ and windows, and photo processing. Synthetic test scenes are in
 References are given in their original language.
 
 1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.:
-   Техносфера, 2005. 1072 с.
+   Техносфера, 2012. 1104 с;
 2. Cooley J.W. An Algorithm for the Machine Calculation of Complex Fourier
    Series / J.W. Cooley, J.W. Tukey // Mathematics of Computation. 1965,
    Vol. 19, No. 90. P. 297–301.
@@ -203,30 +203,6 @@ References are given in their original language.
 9. Oppenheim A.V. Nonlinear Filtering of Multiplied and Convolved Signals /
    A.V. Oppenheim, R.W. Schafer, T.G. Stockham // Proceedings of the IEEE.
    1968, Vol. 56, No. 8. P. 1264–1291.
-
-## System Dependencies
-If building `gmpy2` from source fails due to missing headers for `libgmp`, `libmpfr` and `libmpc`, install them with one of the commands below:
-
-Debian / Ubuntu:
-```
-sudo apt update
-sudo apt install -y libgmp-dev libmpfr-dev libmpc-dev
-```
-
-Fedora:
-```
-sudo dnf install -y gmp-devel mpfr-devel libmpc-devel
-```
-
-Arch Linux:
-```
-sudo pacman -S --needed gmp mpfr libmpc
-```
-
-macOS:
-```
-brew install gmp mpfr libmpc
-```
 
 ## Acknowledgments
 I thank Konstantin Frantsevich Glassman for consultations on homomorphic filtering and image processing.

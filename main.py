@@ -45,7 +45,8 @@ def _print_color_matrix(label: str, matrix: np.ndarray) -> None:
     for k, name in enumerate(_CHANNELS):
         _print_matrix(f"{label} (канал {name})", matrix[:, :, k])
 
-def _run(lf_filter: str, hf_filter: str, lf_gain: float, hf_gain: float) -> None:
+def _run(lf_filter: str, hf_filter: str, lf_gain: float,
+         hf_gain: float) -> None:
     """Создать изображение (E: slow_changes, R: chess) и применить фильтр"""
     np.random.seed(42)
     e, r, i = create_image("slow_changes", "chess", 16, 16)
@@ -87,7 +88,8 @@ def test_black_square_info_16_16() -> None:
 
 
 def test_color_8_8() -> None:
-    """Цветной вход (8, 8, 3): каналы E разные, R: chess, butterworth 0.5/2.0"""
+    """Цветной вход (8, 8, 3): каналы E разные, R: chess,
+    butterworth 0.5/2.0"""
     np.random.seed(42)
     e_channels, r_channels, i_channels = zip(
         *(create_image(e, "chess", 8, 8)

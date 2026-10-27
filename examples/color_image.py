@@ -44,7 +44,8 @@ def main() -> None:
     print(f"mpfr 256 бит, pad={PAD}: {time.time() - t0:.0f} с")
     print(f"2. фильтрован: {balance(filtered.astype(np.float64))}")
 
-    out = denoise(photo_filter.to_uint8(filtered), DENOISE)  # Растяжка совместная
+    # Растяжка совместная
+    out = denoise(photo_filter.to_uint8(filtered), DENOISE)
     print(f"3. вывод     : {balance(out.astype(np.float64))}")
 
     write_rgb(DST_PATH, out)

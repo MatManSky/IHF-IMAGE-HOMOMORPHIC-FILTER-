@@ -1,5 +1,6 @@
 """
-Модуль для создания матриц освещения (E), отражения (R) и составных изображений.
+Модуль для создания матриц освещения (E), отражения (R) и составных
+изображений.
 
 Архитектура:
     - _type_registry — словари с функциями для каждого типа матрицы
@@ -24,8 +25,10 @@ I(x,y) = E(x,y) * R(x,y) => 0 < I(x,y) <= 255;
     cat      — кот (тёмный силуэт на светлом фоне)
 
 Ссылки:
- 1. Красильников Н.Н. Цифровая обработка 2D- и 3D-изображений: учеб. пособие. СПб.: БХВ-Петербург, 2011. 608 с.;
- 2. Stockham T.G. Image Processing in the Context of a Visual Model // Proceedings of the IEEE. 1972, Vol. 60, No. 7. P. 828–842;
+ 1. Красильников Н.Н. Цифровая обработка 2D- и 3D-изображений: учеб.
+    пособие. СПб.: БХВ-Петербург, 2011. 608 с.;
+ 2. Stockham T.G. Image Processing in the Context of a Visual Model //
+    Proceedings of the IEEE. 1972, Vol. 60, No. 7. P. 828–842;
 """
 
 import numpy as np
@@ -65,7 +68,8 @@ def _const_matrix_float(n: int, m: int) -> np.ndarray:
     return np.ones((n, m), dtype=np.float64)
 
 # Детали для снеговика и кота
-def _circle_mask(n: int, m: int, cx: float, cy: float, radius: float) -> np.ndarray:
+def _circle_mask(n: int, m: int, cx: float, cy: float,
+                 radius: float) -> np.ndarray:
     # Круг: (cx, cy) — доли размеров, radius — доля меньшей стороны
     y, x = np.ogrid[:n, :m]
     side = min(n, m)
@@ -78,7 +82,8 @@ def _ellipse_mask(n: int, m: int, cx: float, cy: float,
     return (((x - cx * m) / (rx * m)) ** 2
             + ((y - cy * n) / (ry * n)) ** 2) <= 1.0
 
-def _triangle_mask(n: int, m: int, v0: tuple, v1: tuple, v2: tuple) -> np.ndarray:
+def _triangle_mask(n: int, m: int, v0: tuple, v1: tuple,
+                   v2: tuple) -> np.ndarray:
     # Треугольник по трём вершинам (доли размеров), барицентрические координаты
     y, x = np.ogrid[:n, :m]
     x0, y0 = v0[0] * m, v0[1] * n
@@ -240,7 +245,10 @@ def create_matrix(name: str, n: int, m: int, kind: str = "r") -> np.ndarray:
         types = _e_types
         default = _e_default
     else:
-        raise ValueError(f"Неизвестный тип матрицы: '{kind}'. Используйте 'r' или 'e'.")
+        raise ValueError(
+            f"Неизвестный тип матрицы: '{kind}'. "
+            f"Используйте 'r' или 'e'."
+        )
 
     if name not in types:
         types = default

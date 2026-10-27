@@ -9,7 +9,7 @@
 
 Ссылки:
  1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.:
-    Техносфера, 2005. 1072 с.;
+    Техносфера, 2012. 1104 с.
 """
 
 import inspect
@@ -149,7 +149,8 @@ def _lp_gaussian_matrix(
     d0: float = D0_DEFAULT,
 ) -> list:
     """
-    ФНЧ Гаусса: H = exp(-D^2 / (2*D0^2)), на границе D = D0 = 1/sqrt(e) = ~0.607.
+    ФНЧ Гаусса: H = exp(-D^2 / (2*D0^2)),
+    на границе D = D0 = 1/sqrt(e) = ~0.607.
     Самый гладкий спад АЧХ, без пульсаций в полосе пропускания.
     """
     d0 = _cutoff(d0, n, m)
@@ -227,7 +228,8 @@ def get_filter(name: str, n: int, m: int, **params) -> list:
         )
     matrix_of = _filter_types[name]
     declared = inspect.signature(matrix_of).parameters
-    return matrix_of(n, m, **{k: v for k, v in params.items() if k in declared})
+    return matrix_of(n, m,
+                     **{k: v for k, v in params.items() if k in declared})
 
 # Оконные функции
 TAPER_DEFAULT = 0.5      # доля ширины скоса окна Тьюки
@@ -292,4 +294,5 @@ def get_window(name: str, n: int, m: int, **params) -> list:
         )
     matrix_of = _window_types[name]
     declared = inspect.signature(matrix_of).parameters
-    return matrix_of(n, m, **{k: v for k, v in params.items() if k in declared})
+    return matrix_of(n, m,
+                     **{k: v for k, v in params.items() if k in declared})

@@ -13,15 +13,28 @@
   5. photo_filter и color_homomorphic_filter не падают и дают корректную форму.
 
 Ссылки:
- 1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.: Техносфера, 2005. 1072 с.;
- 2. Cooley J.W. An Algorithm for the Machine Calculation of Complex Fourier Series / J.W. Cooley, J.W. Tukey // Mathematics of Computation. 1965, Vol. 19, No. 90. P. 297–301;
- 3. Stockham T.G. Image Processing in the Context of a Visual Model // Proceedings of the IEEE. 1972, Vol. 60, No. 7. P. 828–842;
- 4. IEEE Std 754-2019. IEEE Standard for Floating-Point Arithmetic. New York: IEEE, 2019. 84 p.;
- 5. Homomorphic filter // GitHub. URL: https://github.com/glasgio/homomorphic-filter (дата обращения: 17.10.2026);
- 6. Андонов В.Г. Влияние резкости изображения на оптимальный градиент кривой тоновоспроизведения в кино и телевидении / В.Г. Андонов, М.В. Антипин, К.Ф. Гласман;
- 7. Красильников Н.Н. Цифровая обработка 2D- и 3D-изображений: учеб. пособие. СПб.: БХВ-Петербург, 2011. 608 с.;
- 8. Сергиенко А.Б. Цифровая обработка сигналов: учеб. пособие. 3-е изд. СПб.: БХВ-Петербург, 2011. 756 с.;
- 9. Oppenheim A.V. Nonlinear Filtering of Multiplied and Convolved Signals / A.V. Oppenheim, R.W. Schafer, T.G. Stockham // Proceedings of the IEEE. 1968, Vol. 56, No. 8. P. 1264–1291.
+ 1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.:
+    Техносфера, 2012. 1104 с.;
+ 2. Cooley J.W. An Algorithm for the Machine Calculation of Complex
+    Fourier Series / J.W. Cooley, J.W. Tukey // Mathematics of Computation.
+    1965, Vol. 19, No. 90. P. 297–301;
+ 3. Stockham T.G. Image Processing in the Context of a Visual Model //
+    Proceedings of the IEEE. 1972, Vol. 60, No. 7. P. 828–842;
+ 4. IEEE Std 754-2019. IEEE Standard for Floating-Point Arithmetic.
+    New York: IEEE, 2019. 84 p.;
+ 5. Homomorphic filter // GitHub. URL:
+    https://github.com/glasgio/homomorphic-filter (дата обращения:
+    17.10.2026);
+ 6. Андонов В.Г. Влияние резкости изображения на оптимальный градиент
+    кривой тоновоспроизведения в кино и телевидении / В.Г. Андонов,
+    М.В. Антипин, К.Ф. Гласман;
+ 7. Красильников Н.Н. Цифровая обработка 2D- и 3D-изображений: учеб.
+    пособие. СПб.: БХВ-Петербург, 2011. 608 с.;
+ 8. Сергиенко А.Б. Цифровая обработка сигналов: учеб. пособие.
+    3-е изд. СПб.: БХВ-Петербург, 2011. 756 с.;
+ 9. Oppenheim A.V. Nonlinear Filtering of Multiplied and Convolved Signals
+   / A.V. Oppenheim, R.W. Schafer, T.G. Stockham // Proceedings of the
+    IEEE. 1968, Vol. 56, No. 8. P. 1264–1291.
 """
 
 import os
@@ -79,7 +92,8 @@ def _raises(exc, fn, *a, **kw):
         return True
     except Exception as other:
         raise AssertionError(
-            f"ожидалось {exc.__name__}, получено {type(other).__name__}: {other}"
+            f"ожидалось {exc.__name__}, получено "
+            f"{type(other).__name__}: {other}"
         ) from None
     return False
 
@@ -107,7 +121,8 @@ def test_zero_pixels_are_clamped():
     """Нули поднимаются до MIN_VALUE, а не дают -inf в логарифме"""
     arr = _real(_filter()._logarithm(np.zeros((N, M), dtype=np.float64)))
     assert np.isfinite(arr).all(), "в логарифме нулей появились inf/nan"
-    assert arr.min() >= np.log2(MIN_VALUE) - 1e-12, "ноль не поднят до MIN_VALUE"
+    assert arr.min() >= np.log2(MIN_VALUE) - 1e-12, \
+        "ноль не поднят до MIN_VALUE"
 
 
 def test_logarithm_is_linear_in_brightness():
@@ -182,12 +197,14 @@ def test_unity_gain_is_transparent():
     src = np.random.default_rng(7).integers(1, 256, (N, M)).astype(np.float64)
     got = _filter(1.0, 1.0).apply(src)
     bad = int((got != src.astype(np.int64)).sum())
-    assert bad == 0, f"единичное усиление исказило {bad} из {got.size} пикселов"
+    assert bad == 0, \
+        f"единичное усиление исказило {bad} из {got.size} пикселов"
 
 
 def test_unity_gain_with_pad_is_transparent():
     """Дополнение до степени двойки не вносит искажений при H = 1."""
-    src = np.random.default_rng(8).integers(1, 256, (12, 20)).astype(np.float64)
+    src = np.random.default_rng(8).integers(1, 256, (12, 20)) \
+        .astype(np.float64)
     for pad in ("zero", "reflect"):
         got = _filter(1.0, 1.0).apply(src, pad=pad)
         assert got.shape == src.shape, f"pad={pad}: форма {got.shape}"
@@ -201,7 +218,8 @@ def test_window_is_transparent_above_floor():
     компенсация делит на max(w, floor), поэтому в хвостах окна точность
     невозможна по построению. Проверяем обе половины контракта
     """
-    src = np.random.default_rng(9).integers(1, 256, (12, 20)).astype(np.float64)
+    src = np.random.default_rng(9).integers(1, 256, (12, 20)) \
+        .astype(np.float64)
     got = _filter(1.0, 1.0).apply(src, pad="reflect", window="tukey")
 
     w = _real(filtration.get_window("tukey", 12, 20))
@@ -238,11 +256,13 @@ def test_suppressed_lows_darken_flat_shading():
 # АЧХ и окна
 
 def test_every_filter_has_expected_dc_gain():
-    """ФНЧ без пульсаций и allpass проходят постоянную (H=1), ФВЧ подавляет (H=0)"""
+    """ФНЧ без пульсаций и allpass проходят постоянную (H=1),
+    ФВЧ подавляет (H=0)"""
     for name in filtration._filter_types:
         h = float(np.real(filtration.get_filter(name, 8, 8, d0=2.0)[0][0]))
         if name.startswith("hp_"):
-            want = 0.0 if "chebyshev" not in name else None  # пульсация lp на DC
+            # Пульсация lp на DC
+            want = 0.0 if "chebyshev" not in name else None
         elif name == "allpass":
             want = 1.0
         elif "chebyshev" in name:
@@ -250,7 +270,8 @@ def test_every_filter_has_expected_dc_gain():
         else:
             want = 1.0
         if want is not None:
-            assert abs(h - want) < 1e-9, f"{name}: H(0,0)={h}, ожидалось {want}"
+            assert abs(h - want) < 1e-9, \
+                f"{name}: H(0,0)={h}, ожидалось {want}"
 
 
 def test_chebyshev_has_ripple_at_dc():
@@ -273,7 +294,8 @@ def test_butterworth_is_monotone():
     h = _real(filtration.get_filter("lp_butterworth", 16, 16, d0=4.0, order=4))
     diag = [h[k][k] for k in range(9)]
     for a, b in zip(diag, diag[1:]):
-        assert b <= a + 1e-12, f"lp_butterworth: неубывание по диагонали: {diag}"
+        assert b <= a + 1e-12, \
+            f"lp_butterworth: неубывание по диагонали: {diag}"
 
 
 def test_gaussian_dc_is_one():
@@ -300,8 +322,10 @@ def test_lows_and_highs_are_complementary():
 
 def test_afc_is_monotone_along_frequency():
     """АЧХ ФНЧ убывает с частотой, ФВЧ — растёт (вдоль строки)"""
-    lo = _real(filtration.get_filter("lp_butterworth", 16, 16, d0=4.0, order=2))
-    hi = _real(filtration.get_filter("hp_butterworth", 16, 16, d0=4.0, order=2))
+    lo = _real(filtration.get_filter(
+        "lp_butterworth", 16, 16, d0=4.0, order=2))
+    hi = _real(filtration.get_filter(
+        "hp_butterworth", 16, 16, d0=4.0, order=2))
     assert all(lo[0][k] >= lo[0][k + 1] for k in range(1, 7)), \
         "ФНЧ не убывает по частоте"
     assert all(hi[0][k] <= hi[0][k + 1] for k in range(1, 7)), \
@@ -326,7 +350,8 @@ def test_unknown_names_are_rejected():
 
 
 def test_mismatched_filter_pair_is_rejected():
-    """Несогласованная пара (lp_butterworth + hp_gaussian) не должна проходить."""
+    """Несогласованная пара (lp_butterworth + hp_gaussian)
+    не должна проходить."""
     assert _raises(ValueError, homomorphic_filter,
                    "lp_butterworth", "hp_gaussian", 1.0, 1.0, 4.0, 2)
 
@@ -392,13 +417,15 @@ def test_to_uint8_is_in_range_for_every_mode():
     for mode in photo_mod._output_types:
         u8 = photo_mod.photo_filter.to_uint8(out, output=mode)
         assert u8.dtype == np.uint8, f"{mode}: тип {u8.dtype}"
-        assert int(u8.min()) >= 0 and int(u8.max()) <= 255, f"{mode}: вне 0..255"
+        assert int(u8.min()) >= 0 and int(u8.max()) <= 255, \
+            f"{mode}: вне 0..255"
 
 
 def test_to_uint8_rejects_unknown_mode_and_params():
     values = np.arange(16, dtype=np.float64).reshape(4, 4)
     assert _raises(ValueError, photo_mod.photo_filter.to_uint8,
-                   values, output="nope"), "неизвестный режим вывода не отклонён"
+                   values, output="nope"), \
+        "неизвестный режим вывода не отклонён"
     assert _raises(ValueError, photo_mod.photo_filter.to_uint8,
                    values, output="gamma", bogus=1), "лишний параметр принят"
 
@@ -413,7 +440,8 @@ def test_photo_filter_file_cycle():
 
         got = photo_mod.read_gray(a)
         assert got.shape == (N, M), f"прочитана форма {got.shape}"
-        assert got.min() >= MIN_VALUE, "нулевые пикселы не подняты до MIN_VALUE"
+        assert got.min() >= MIN_VALUE, \
+            "нулевые пикселы не подняты до MIN_VALUE"
 
         out = photo_mod.photo_filter(lf_gain=0.8, hf_gain=1.5, d0=4.0).apply(a)
         photo_mod.write_gray(b, photo_mod.photo_filter.to_uint8(out))
@@ -422,17 +450,20 @@ def test_photo_filter_file_cycle():
 
 
 def test_to_uint10_12_16_are_in_range_for_every_mode():
-    """10, 12 и 16 бит: dtype uint16, диапазон 0..2^bits-1, шкалы согласованы"""
+    """10, 12 и 16 бит: dtype uint16, диапазон 0..2^bits-1,
+    шкалы согласованы"""
     src = np.random.default_rng(23).integers(0, 256, (N, M)).astype(np.float64)
     out = photo_mod.photo_filter(lf_gain=0.8, hf_gain=2.0, d0=4.0).apply(src)
     for bits in (10, 12, 16):
         name = f"to_uint{bits}"
         for mode in photo_mod._output_types:
             values = getattr(photo_mod.photo_filter, name)(out, output=mode)
-            assert values.dtype == np.uint16, f"{name}/{mode}: тип {values.dtype}"
+            assert values.dtype == np.uint16, \
+                f"{name}/{mode}: тип {values.dtype}"
             top = int(values.max())
-            assert int(values.min()) >= 0 and top <= photo_mod.MAX_UINT[bits], \
-                f"{name}/{mode}: вне 0..{photo_mod.MAX_UINT[bits]} (max {top})"
+            limit = photo_mod.MAX_UINT[bits]
+            assert int(values.min()) >= 0 and top <= limit, \
+                f"{name}/{mode}: вне 0..{limit} (max {top})"
     # Согласованность шкал: в долях полной шкалы значения совпадают с
     # точностью до половины шага каждой шкалы (верхние границы 255 и 4095
     # не кратны друг другу, поэтому в отсчётах расхождение до 1.5 LSB — норма)
@@ -475,8 +506,8 @@ def test_write_gray_bits_roundtrip_is_exact():
             if bits > 8:
                 # без bits 16-битный PNG читается как 8-битный: старшие биты
                 shrunk = photo_mod.read_gray(path)
-                expected = np.maximum((values >> (bits - 8)).astype(np.float64),
-                                      MIN_VALUE)
+                expected = np.maximum(
+                    (values >> (bits - 8)).astype(np.float64), MIN_VALUE)
                 assert np.array_equal(shrunk, expected), \
                     f"{bits} бит: чтение по умолчанию — не старшие 8 бит"
 
@@ -488,7 +519,8 @@ def test_write_gray_bits_roundtrip_is_exact():
         path = os.path.join(d, "chain12.png")
         photo_mod.write_gray(path, v12, bits=12)
         back = photo_mod.read_gray(path, bits=12)
-    assert np.array_equal(back, np.maximum(v12.astype(np.float64), MIN_VALUE)), \
+    assert np.array_equal(
+        back, np.maximum(v12.astype(np.float64), MIN_VALUE)), \
         "цепочка to_uint12 -> write_gray -> read_gray не замкнута"
 
 
@@ -556,7 +588,8 @@ def _color_scene() -> np.ndarray:
 
 
 def _log_mean(values: np.ndarray, channel: int) -> float:
-    """Среднее log2 по каналу: сдвиг температуры меняет его ровно в lf_gain раз"""
+    """Среднее log2 по каналу: сдвиг температуры меняет его
+    ровно в lf_gain раз"""
     return float(np.log2(values[..., channel].astype(np.float64)).mean())
 
 
@@ -590,7 +623,8 @@ def test_temperature_touches_only_low_frequencies():
     lp = filtration.get_filter("lp_butterworth", N, M, d0=4.0, order=2)
     spectrum = _fft_2d(log_data)
     low = _fft_2d(
-        [[s * h for s, h in zip(row, hrow)] for row, hrow in zip(spectrum, lp)],
+        [[s * h for s, h in zip(row, hrow)]
+         for row, hrow in zip(spectrum, lp)],
         inverse=True,
     )
     expected = (g - 1.0) * _real(low)
@@ -654,7 +688,8 @@ def test_denoise_is_off_by_default():
     """По умолчанию шумоподавление выключено и не трогает кадр."""
     values = _noisy_step()
     assert photo_mod.DENOISE_DEFAULT is False, "denoise включён по умолчанию"
-    assert photo_mod.denoise(values) is values, "выключенный denoise изменил кадр"
+    assert photo_mod.denoise(values) is values, \
+        "выключенный denoise изменил кадр"
     assert np.array_equal(photo_mod.denoise(values, False), values)
     assert photo_mod.denoise(values, True).dtype == values.dtype
 
@@ -669,7 +704,8 @@ def test_bilateral_kills_noise_keeps_edge():
     assert after < before / 2, f"шум {before:.2f} -> {after:.2f}, не вдвое"
 
     left, right = STEP // 2 - 13, STEP // 2 + 3
-    step_before = values[:, right:right + 10].mean() - values[:, left:left + 10].mean()
+    step_before = (values[:, right:right + 10].mean()
+                   - values[:, left:left + 10].mean())
     step_after = (denoised[:, right:right + 10].mean()
                   - denoised[:, left:left + 10].mean())
     assert abs(step_after - step_before) <= 1.0, (
@@ -734,7 +770,8 @@ def test_denoise_rejects_bad_params_and_shape():
         ("radius=0", lambda: photo_mod.bilateral(values, radius=0)),
         ("radius=1.5", lambda: photo_mod.bilateral(values, radius=1.5)),
         ("sigma_range=0", lambda: photo_mod.bilateral(values, sigma_range=0)),
-        ("sigma_space=-1", lambda: photo_mod.bilateral(values, sigma_space=-1)),
+        ("sigma_space=-1",
+         lambda: photo_mod.bilateral(values, sigma_space=-1)),
         ("кадр (n, m, 4)", lambda: photo_mod.bilateral(np.zeros((N, M, 4)))),
         ("кадр (n,)", lambda: photo_mod.bilateral(np.zeros(N))),
         ("denoise с чужим параметром",
@@ -755,8 +792,10 @@ def test_mono_filter_requires_2d_image():
     """Ядро принимает только (n, m): 1D и 3D — внятный ValueError"""
     assert _raises(ValueError, _filter().apply, np.full(16, 100.0)), \
         "одномерный вход принят"
-    assert _raises(ValueError, _filter().apply, np.full((4, 4, 3), 100.0)), \
-        "трёхмерный вход принят ядром (для цвета есть color_homomorphic_filter)"
+    assert _raises(ValueError, _filter().apply, np.full((4, 4, 3), 100.0)), (
+        "трёхмерный вход принят ядром "
+        "(для цвета есть color_homomorphic_filter)"
+    )
     # список списков — не numpy, но форму имеет: приводится, а не падает
     from_list = _filter().apply([[100.0] * 8] * 8)
     from_array = _filter().apply(np.full((8, 8), 100.0))
@@ -1378,8 +1417,10 @@ def test_log2_cache_shares_only_equal_values():
     assert a is not b, "разные значения получили один объект"
     assert log_data[7][0] is a and log_data[7][1] is b, \
         "одинаковые значения в другой строке не переиспользуются"
-    assert abs(a - mpc(gmpy2.log2(mpfr(100)))) < mpfr("1e-40"), "log2(100) неверен"
-    assert abs(b - mpc(gmpy2.log2(mpfr(200)))) < mpfr("1e-40"), "log2(200) неверен"
+    assert abs(a - mpc(gmpy2.log2(mpfr(100)))) < mpfr("1e-40"), \
+        "log2(100) неверен"
+    assert abs(b - mpc(gmpy2.log2(mpfr(200)))) < mpfr("1e-40"), \
+        "log2(200) неверен"
 
 
 def test_afc_cache_clears_on_resize():

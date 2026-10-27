@@ -13,7 +13,7 @@
 
 Ссылки:
  1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.:
-    Техносфера, 2005. 1072 с.;
+    Техносфера, 2012. 1104 с.;
  2. Cooley J.W. An Algorithm for the Machine Calculation of Complex Fourier
     Series / J.W. Cooley, J.W. Tukey // Mathematics of Computation. 1965,
     Vol. 19, No. 90. P. 297–301;
@@ -232,10 +232,11 @@ def _pad_to_power_of_two(data: list, mode: str = "zero") -> list:
             mirror = [cols - 1 - k % cols for k in range(target_cols - cols)]
             data = [list(row) + [row[j] for j in mirror] for row in data]
 
-    if target_rows > rows:
-        if mode == "zero":
-            blank = [mpc(0)] * target_cols
-            data = list(data) + [list(blank) for _ in range(target_rows - rows)]
+        if target_rows > rows:
+            if mode == "zero":
+                blank = [mpc(0)] * target_cols
+                extra = [list(blank) for _ in range(target_rows - rows)]
+                data = list(data) + extra
         else:
             mirror = [rows - 1 - k % rows for k in range(target_rows - rows)]
             data = list(data) + [list(data[j]) for j in mirror]
@@ -269,7 +270,8 @@ def _print_dataset(label: str, data) -> None:
 class homomorphic_filter:
     """
     Пример использования:
-    f = homomorphic_filter(lf_gain=0.5, hf_gain=2.0)  # ослабить свет, усилить коэф. отр
+    # ослабить свет, усилить коэффициент отражения
+    f = homomorphic_filter(lf_gain=0.5, hf_gain=2.0)
     result = f.apply(image_matrix)
 
     Кадр произвольного размера для БПФ radix-2 дополняется:
@@ -292,26 +294,26 @@ class homomorphic_filter:
                 lf_filter.startswith("lp_")
                 and hf_filter == "hp_" + lf_filter[len("lp_"):]
             )
-            or lf_filter == "allpass" 
+            or lf_filter == "allpass"
             or hf_filter == "allpass"
         ):
             raise ValueError(
-                f"Несогласованная пара фильтров: '{lf_filter}' + '{hf_filter}'. "
-                f"Ожидается lp_X и hp_X одной семьи, например "
-                f"'{filtration.DEFAULT_LF_FILTER}' + "
-                f"'{filtration.DEFAULT_HF_FILTER}', либо 'allpass' с любым "
-                f"фильтром."
+                f"Несогласованная пара фильтров: '{lf_filter}' + "
+                f"'{hf_filter}'. Ожидается lp_X и hp_X одной семьи, "
+                f"например '{filtration.DEFAULT_LF_FILTER}' + "
+                f"'{filtration.DEFAULT_HF_FILTER}', либо 'allpass' "
+                f"с любым фильтром."
             )
         self._lf_filter = lf_filter
         self._hf_filter = hf_filter
         self._lf_gain = mpfr(lf_gain) # множитель НЧ-части: <1 ослабляет свет
-        self._hf_gain = mpfr(hf_gain) # множитель ВЧ-части: >1 подчёркивает детали
+        self._hf_gain = mpfr(hf_gain) # ВЧ-множитель: >1 подчёркивает детали
 
         # Параметры частотной сетки
         self._filter_params = {
             "d0": d0,  # Частота среза в пикселях
             "order": order, # Крутизна среза АЧХ
-            "ripple_db": ripple_db, # Неравномерность АЧХ Чебышёва-1 в полосе пропускания
+            "ripple_db": ripple_db,  # Неравномерность АЧХ Чеб-1 в пол.попус.
         }
 
         # Суммарная АЧХ (нужна для оптимизации)
@@ -356,8 +358,8 @@ class homomorphic_filter:
             image: входная матрица формы (n, m), значения > 0
                    (numpy.ndarray; список списков приводится к ndarray)
             pad: "zero" — дополнить кадр нулями до степени двойки,
-                 "reflect" — дополнить зеркально; 
-            window: имя окна из filtration, после ОБПФ окно компенсируется
+             "reflect" — дополнить зеркально;
+             window: имя окна из filtration, после ОБПФ окно компенсируется
 
         Возвращает:
             numpy.ndarray: результат в формате входной матрицы (int64)
@@ -367,7 +369,7 @@ class homomorphic_filter:
         """
         return self._apply(image, pad, window, verbose=False)
 
-    # apply с отладочным выводом 
+    # apply с отладочным выводом
     def apply_info(
         self,
         image: np.ndarray,
@@ -484,7 +486,6 @@ class homomorphic_filter:
 
     def _antilogarithm(self, data: list, n: int, m: int) -> np.ndarray:
         # Антилогарифмирование exp2 и округление к ближайшему целому.
-        
         vals = [v.real for row in data[:n] for v in row[:m]]
         total = n * m
         x = np.fromiter((float(v) for v in vals), dtype=np.float64,
@@ -492,7 +493,9 @@ class homomorphic_filter:
         with np.errstate(over="ignore", invalid="ignore"):
             y = np.exp2(x)
         ok = np.isfinite(y) & (y < 9.0e18)
-        ok &= np.abs(y - (np.floor(y) + 0.5)) > _ROUND_MARGIN * np.maximum(1.0, y)
+        ok &= np.abs(y - (np.floor(y) + 0.5)) > (
+            _ROUND_MARGIN * np.maximum(1.0, y)
+        )
         out = np.floor(np.where(ok, y, 0.0) + 0.5).astype(np.int64)
         exact = np.flatnonzero(~ok)
         if exact.size:
