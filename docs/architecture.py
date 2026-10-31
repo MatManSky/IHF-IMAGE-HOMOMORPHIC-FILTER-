@@ -51,7 +51,8 @@ LANGS = {
                         "округление → выход int64\n"
                         "pad = zero | reflect, окна hann | tukey "
                         "(делятся после ОБПФ);\n"
-                        "MIN_VALUE = 1 поднимает неположительную яркость"),
+                         "MIN_VALUE = 1 поднимает неположительную яркость, "
+                         "компенсируется на выходе"),
         "filtration": ("filtration.py — функции частотной области (mpfr)",
                        "get_filter: lp/hp Баттерворт · Чебышёв-1 · "
                        "Гаусс · allpass "
@@ -106,7 +107,8 @@ LANGS = {
                         "→ output int64\n"
                         "pad = zero | reflect, windows hann | tukey "
                         "(divided after IDFT);\n"
-                        "MIN_VALUE = 1 lifts non-positive brightness"),
+                         "MIN_VALUE = 1 lifts non-positive brightness, "
+                         "compensated at output"),
         "filtration": ("filtration.py — frequency-domain functions (mpfr)",
                        "get_filter: lp/hp Butterworth · Chebyshev-1 · "
                        "Gaussian · allpass "

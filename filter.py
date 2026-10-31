@@ -8,8 +8,10 @@
     2. Двумерное БПФ
     3. Разделение спектра на НЧ и ВЧ, обработка, соединение
     4. Обратное двумерное БПФ
-    5. Антилогарифмирование exp2 (mpfr)
-    6. Округление к ближайшему целому с допуском погрешности обработки
+     5. Антилогарифмирование exp2 (mpfr)
+     6. Округление к ближайшему целому с допуском погрешности обработки
+     7. Компенсация: пикселы, поднятые до MIN_VALUE перед log2,
+        возвращаются к исходному уровню
 
 Ссылки:
  1. Гонсалес Р. Цифровая обработка изображений / Р. Гонсалес, Р. Вудс. М.:
@@ -362,7 +364,9 @@ class homomorphic_filter:
              window: имя окна из filtration, после ОБПФ окно компенсируется
 
         Возвращает:
-            numpy.ndarray: результат в формате входной матрицы (int64)
+            numpy.ndarray: результат в формате входной матрицы (int64);
+            пикселы, поднятые до MIN_VALUE перед log2, возвращаются
+            к исходному значению
 
         Исключения:
             ValueError: если форма входной матрицы не (n, m)
@@ -407,6 +411,7 @@ class homomorphic_filter:
         report("input I", image)
 
         # 1. Логарифмирование
+        lifted = np.asarray(image, dtype=np.float64) < MIN_VALUE
         log_data = self._logarithm(image)
         report("log2(I)", log_data)
 
@@ -456,6 +461,14 @@ class homomorphic_filter:
         # 5-6. Антилогарифмирование и округление для вывода
         result = self._antilogarithm(restored, n, m)
         report("exp2 and rounding", result)
+
+        # 7. Компенсация подъёма до MIN_VALUE:
+        # пикселы, поднятые перед log2, возвращаются к исходному уровню
+        if lifted.any():
+            result[lifted] = np.maximum(
+                result[lifted] - MIN_VALUE, 0.0
+            ).astype(np.int64)
+            report("MIN_VALUE compensation", result)
 
         return result
 

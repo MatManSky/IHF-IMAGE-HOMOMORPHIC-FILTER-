@@ -193,9 +193,13 @@ def test_fft_is_linear():
 # Прозрачность
 
 def test_unity_gain_is_transparent():
-    """lf_gain = hf_gain = 1: H = 1, спектр не меняется, выход = вход"""
+    """lf_gain = hf_gain = 1: H = 1, спектр не меняется, выход = вход.
+    Нулевые пикселы компенсируются: возвращаются к 0."""
     src = np.random.default_rng(7).integers(1, 256, (N, M)).astype(np.float64)
+    # добавим нули в угол, чтобы проверить компенсацию MIN_VALUE
+    src[0, 0] = 0
     got = _filter(1.0, 1.0).apply(src)
+    assert got[0, 0] == 0, "нулевой пиксел не компенсирован"
     bad = int((got != src.astype(np.int64)).sum())
     assert bad == 0, \
         f"единичное усиление исказило {bad} из {got.size} пикселов"
