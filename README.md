@@ -64,7 +64,7 @@ write_gray("out.png", f.to_uint8(f.apply(photo)))
 from photo import photo_filter, read_rgb, write_rgb
 from color_filter import color_homomorphic_filter
 
-photo = read_rgb("examples/pic3_small.png")  # float64 (n, m, 3), RGB, альфа отбрасывается
+photo = read_rgb("examples/pic3_small.png")  # float64 (n, m, 3 или 4), RGB или RGBA
 
 # Усиления можно задавать по каналам: скаляр или (R, G, B)
 f = color_homomorphic_filter(lf_gain=(0.99, 1.0, 1.01), hf_gain=1.0, pad="reflect")

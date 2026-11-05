@@ -330,7 +330,6 @@ def _draw_simple_cat(size: tuple) -> np.ndarray:
 
     # Грудка
     chest_w = int(60 * scale)
-    chest_h = int(80 * scale)
     draw.ellipse([(cat_x - chest_w // 2, cat_y - 20 * scale),
                   (cat_x + chest_w // 2, cat_y + 60 * scale)],
                  fill=(40, 40, 40))

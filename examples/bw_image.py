@@ -9,12 +9,9 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from photo import photo_filter, read_gray, write_gray, denoise
-from filter import _print_dataset
 
 SRC_PATH = Path(__file__).with_name("pic1.png")
 DST_PATH = Path(__file__).with_name("pic1_processed.png")

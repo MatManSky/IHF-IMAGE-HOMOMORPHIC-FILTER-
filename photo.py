@@ -81,24 +81,48 @@ def write_gray(path, values: np.ndarray, bits: int = BITS_DEFAULT) -> None:
     Image.fromarray(values).save(path)
 
 
+# Режимы с альфа-каналом
+_ALPHA_MODES = ("RGBA", "RGBa", "LA", "La", "PA")
+
+
 def read_rgb(path) -> np.ndarray:
-    # Прочитать изображение как трёхканальную матрицу float64 формы (n, m, 3).
+    """
+    Прочитать цветной кадр float64: (n, m, 3) или (n, m, 4).
+
+    Источник с альфой (RGBA, LA, PA, палитра с прозрачностью) приводится
+    к RGBA — альфа сохраняется четвёртым каналом и не меняется.
+    """
     with Image.open(path) as picture:
-        values = np.asarray(picture.convert("RGB"), dtype=np.float64)
-    return np.maximum(values, MIN_VALUE)
+        has_alpha = (
+            picture.mode in _ALPHA_MODES or "transparency" in picture.info
+        )
+        mode = "RGBA" if has_alpha else "RGB"
+        values = np.asarray(picture.convert(mode), dtype=np.float64)
+    values[..., :3] = np.maximum(values[..., :3], MIN_VALUE)
+    return values
 
 
 def write_rgb(path, values: np.ndarray) -> None:
-    # Записать матрицу uint8 для RGB (n, m, 3). Цветной кадр
-    # записывается по 8 бит на канал (8*3=24)
+    """
+    Записать цветной кадр uint8: (n, m, 3) как RGB, (n, m, 4) как RGBA.
+
+    Альфа-канал без изменений — прозрачность сохраняется. Контейнер
+    должен поддерживать альфу: PNG и TIFF — да, JPEG — нет.
+    """
     values = np.asarray(values)
+    if values.ndim != 3 or values.shape[2] not in (CHANNELS, CHANNELS + 1):
+        raise ValueError(
+            f"Ожидается кадр (n, m, {CHANNELS}) или "
+            f"(n, m, {CHANNELS + 1}), получена форма {values.shape}"
+        )
     if values.dtype != np.uint8:
         raise ValueError(
             f"Цветной кадр записывается в 8 бит,"
             f"передан dtype {values.dtype}: "
             f"нужен photo_filter.to_uint8"
         )
-    Image.fromarray(values, mode="RGB").save(path)
+    mode = "RGBA" if values.shape[2] == CHANNELS + 1 else "RGB"
+    Image.fromarray(values, mode=mode).save(path)
 
 
 def _limits(values: np.ndarray, low: float,
@@ -151,7 +175,13 @@ OUTPUT_DEFAULT = "percentile"
 
 def _to_uint(values: np.ndarray, bits: int, output: str,
              **params) -> np.ndarray:
-    # Общий перевод результата фильтра в bits бит (0..MAX_UINT[bits])
+    # Общий перевод результата фильтра в bits бит (0..MAX_UINT[bits]).
+    # Растяжка считается по цветовым каналам
+    source = np.asarray(values)
+    alpha = None
+    if source.ndim == 3 and source.shape[2] == CHANNELS + 1:
+        alpha = source[..., CHANNELS]
+        source = source[..., :CHANNELS]
     if bits not in MAX_UINT:
         raise ValueError(
             f"Неизвестная разрядность: {bits}. Доступные: {sorted(MAX_UINT)}."
@@ -171,9 +201,16 @@ def _to_uint(values: np.ndarray, bits: int, output: str,
             f"Доступны: {sorted(declared)}."
         )
     maximum = float(MAX_UINT[bits])
-    scaled = policy_of(np.asarray(values, dtype=np.float64), maximum, **params)
+    scaled = policy_of(np.asarray(source, dtype=np.float64), maximum,
+                       **params)
     clipped = np.clip(np.floor(scaled + 0.5), 0, maximum)
-    return clipped.astype(np.uint8 if bits == 8 else np.uint16)
+    result = clipped.astype(np.uint8 if bits == 8 else np.uint16)
+    if alpha is not None:
+        alpha = np.clip(np.floor(np.asarray(alpha, dtype=np.float64) + 0.5),
+                        0, maximum)
+        result = np.concatenate(
+            [result, alpha.astype(result.dtype)[..., np.newaxis]], axis=2)
+    return result
 
 
 class photo_filter:
@@ -275,7 +312,8 @@ def bilateral(
     выбрана, mpfr избыточна.
 
     Параметры:
-        values: готовый кадр (n, m) или (n, m, 3) после to_uintN
+        values: готовый кадр (n, m), (n, m, 3) или (n, m, 4) после to_uintN;
+                для RGBA альфа-канал не меняется
         radius: полуразмер окна, кадр обрабатывается окном (2*radius + 1)^2
         sigma_space: вес соседа на расстоянии d — гаусс с сигмой в пикселах
         sigma_range: вес соседа с разностью яркости dr — в отсчётах шкалы
@@ -287,7 +325,8 @@ def bilateral(
                        к ближайшему и обрезкой диапазона)
 
     Исключения:
-        ValueError: если форма не (n, m) и не (n, m, 3) или параметры невалидны
+        ValueError: если форма не (n, m), (n, m, 3), (n, m, 4) или параметры
+                    невалидны
 
     Цветной кадр фильтруется одним весом на все каналы: разность яркости —
     сумма квадратов по каналам. Граница, заметная в одном канале, защищает от
@@ -302,6 +341,11 @@ def bilateral(
         )
 
     source = np.asarray(values)
+    if source.ndim == 3 and source.shape[2] == CHANNELS + 1:
+        # Альфа-канал не учитывается: вес считается только по цветовым каналам
+        rgb = bilateral(source[..., :CHANNELS], radius=radius,
+                        sigma_space=sigma_space, sigma_range=sigma_range)
+        return np.concatenate([rgb, source[..., CHANNELS:]], axis=2)
     data = source.astype(np.float64)
     if data.ndim == 2:
         data = data[:, :, None]
@@ -356,4 +400,3 @@ def denoise(values: np.ndarray, enabled: bool = DENOISE_DEFAULT,
     if not enabled:
         return values
     return bilateral(values, **params)
-

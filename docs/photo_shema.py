@@ -42,12 +42,12 @@ LANGS = {
         ],
         "color": [
             ("pic3_small.png\nфото на входе\n(PNG / JPEG)", False),
-            ("read_rgb\nчтение в RGB,\nfloat64 (n, m, 3)", False),
+            ("read_rgb\nRGB или RGBA:\nfloat64 (n, m, 3/4)", False),
             ("цветной фильтр\nпоканальный mpfr,\n"
              "усиления по (R, G, B)", False),
-            ("to_uint8\nрастяжка совместная\nпо всем каналам", False),
+            ("to_uint8\nрастяжка по RGB,\nальфа без изменений", False),
             ("denoise\n(билатерный фильтр)\nвыкл",             True),
-            ("write_rgb\nзапись только 8 бит,\nиначе ValueError", False),
+            ("write_rgb\n8 бит, RGB или\nRGBA (n, m, 4)", False),
         ],
         "temp": ("make_colder / make_warmer — опция\n"
                  "lf_gain = (1−t, 1, 1+t): холоднее / теплее"),
@@ -64,11 +64,11 @@ LANGS = {
         ],
         "color": [
             ("pic3_small.png\ninput photo\n(PNG / JPEG)", False),
-            ("read_rgb\nread into RGB,\nfloat64 (n, m, 3)", False),
+            ("read_rgb\nRGB or RGBA:\nfloat64 (n, m, 3/4)", False),
             ("color filter\nper-channel mpfr,\ngains per (R, G, B)", False),
-            ("to_uint8\njoint stretch\nacross all channels", False),
+            ("to_uint8\nstretch on RGB,\nalpha untouched", False),
             ("denoise\n(bilateral filter)\ndisabled",                 True),
-            ("write_rgb\n8-bit only,\nelse ValueError", False),
+            ("write_rgb\n8-bit, RGB or\nRGBA (n, m, 4)", False),
         ],
         "temp": ("make_colder / make_warmer — option\n"
                  "lf_gain = (1−t, 1, 1+t): cooler / warmer"),

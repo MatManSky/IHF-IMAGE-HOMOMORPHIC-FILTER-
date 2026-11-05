@@ -60,7 +60,7 @@ Channels are processed independently.
 from photo import photo_filter, read_rgb, write_rgb
 from color_filter import color_homomorphic_filter
 
-photo = read_rgb("examples/pic3_small.png")  # float64 (n, m, 3), RGB; alpha is discarded
+photo = read_rgb("examples/pic3_small.png")  # float64 (n, m, 3 or 4), RGB or RGBA; alpha preserved
 
 # Gains: scalar or one value per channel (R, G, B)
 f = color_homomorphic_filter(lf_gain=(0.99, 1.0, 1.01), hf_gain=1.0, pad="reflect")

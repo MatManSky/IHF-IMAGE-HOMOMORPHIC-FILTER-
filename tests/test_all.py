@@ -583,6 +583,90 @@ def test_color_gray_matches_monochrome():
     assert diff.max() <= 1, f"серый канал разошёлся с моно на {diff.max()}"
 
 
+# RGBA: альфа проходит весь конвейер без потерь
+
+def _rgba_frame() -> tuple:
+    """uint8 RGBA с гарантированно прозрачным и непрозрачным пикселом"""
+    rng = np.random.default_rng(21)
+    rgb8 = rng.integers(0, 256, (N, M, 3)).astype(np.uint8)
+    alpha8 = rng.integers(0, 256, (N, M)).astype(np.uint8)
+    alpha8[0, 0] = 0
+    alpha8[-1, -1] = 255
+    return rgb8, alpha8
+
+
+def test_read_rgb_rgb_stays_three_channels():
+    """Файл без альфы читается как (n, m, 3), как и раньше"""
+    rng = np.random.default_rng(23)
+    rgb8 = rng.integers(1, 256, (N, M, 3)).astype(np.uint8)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "plain.png")
+        Image.fromarray(rgb8, mode="RGB").save(path)
+        frame = photo_mod.read_rgb(path)
+    assert frame.shape == (N, M, 3), f"форма {frame.shape}, ожидалась 3-кан."
+    assert np.array_equal(frame, rgb8.astype(np.float64)), \
+        "RGB-каналы изменились при чтении"
+
+
+def test_read_write_rgb_rgba_roundtrip():
+    """RGBA-файл: альфа переживает чтение, фильтр, to_uint8 и запись"""
+    rgb8, alpha8 = _rgba_frame()
+    f = color_homomorphic_filter(lf_gain=0.8, hf_gain=1.6, d0=4.0)
+    with tempfile.TemporaryDirectory() as tmp:
+        src = os.path.join(tmp, "src.png")
+        photo_mod.write_rgb(src, np.dstack([rgb8, alpha8]))
+
+        frame = photo_mod.read_rgb(src)
+        assert frame.shape == (N, M, 4), \
+            f"форма {frame.shape}, ожидалось (n, m, 4)"
+        assert np.array_equal(frame[..., 3], alpha8), \
+            "альфа изменилась при чтении"
+        assert np.array_equal(
+            frame[..., :3],
+            np.maximum(rgb8.astype(np.float64), MIN_VALUE)), \
+            "RGB-каналы изменились при чтении сверх подъёма MIN_VALUE"
+
+        out = f.apply(frame)
+        assert out.shape == (N, M, 4) and out.dtype == np.int64
+        assert np.array_equal(out[..., 3], alpha8.astype(np.int64)), \
+            "альфа изменилась в фильтре"
+        assert np.array_equal(out[..., :3], f.apply(frame[..., :3])), \
+            "RGB-часть RGBA разошлась с 3-канальным вызовом"
+
+        out8 = photo_mod.photo_filter.to_uint8(out)
+        assert out8.shape == (N, M, 4) and out8.dtype == np.uint8
+        assert np.array_equal(out8[..., 3], alpha8), \
+            "перцентильная растяжка затронула альфу"
+
+        dst = os.path.join(tmp, "dst.png")
+        photo_mod.write_rgb(dst, out8)
+        back = np.asarray(Image.open(dst))
+        assert back.shape == (N, M, 4), f"форма {back.shape} в файле"
+        assert np.array_equal(back[..., 3], alpha8), \
+            "альфа потерялась при записи"
+
+
+def test_denoise_rgba_keeps_alpha():
+    """denoise размывает только цвет: альфа возвращается без изменений"""
+    rgb8, alpha8 = _rgba_frame()
+    den = photo_mod.denoise(np.dstack([rgb8, alpha8]), enabled=True,
+                            radius=1)
+    assert den.shape == (N, M, 4) and den.dtype == np.uint8
+    assert np.array_equal(den[..., 3], alpha8), "denoise размыл альфу"
+
+
+def test_color_parallel_matches_sequential():
+    """Пул процессов (parallel=True) даёт побитово тот же результат"""
+    rng = np.random.default_rng(22)
+    rgb = rng.integers(1, 256, (12, 20, 3)).astype(np.float64)
+    f = color_homomorphic_filter(lf_gain=0.7, hf_gain=1.9, d0=4.0,
+                                 pad="reflect")
+    sequential = f.apply(rgb, parallel=False)
+    parallel = f.apply(rgb, parallel=True)
+    assert np.array_equal(sequential, parallel), \
+        "пул процессов изменил результат фильтрации"
+
+
 # Температура освещения
 
 def _color_scene() -> np.ndarray:
@@ -776,7 +860,8 @@ def test_denoise_rejects_bad_params_and_shape():
         ("sigma_range=0", lambda: photo_mod.bilateral(values, sigma_range=0)),
         ("sigma_space=-1",
          lambda: photo_mod.bilateral(values, sigma_space=-1)),
-        ("кадр (n, m, 4)", lambda: photo_mod.bilateral(np.zeros((N, M, 4)))),
+        # (n, m, 4) теперь валиден (RGBA, альфа проходит) — невалидна 5-я
+        ("кадр (n, m, 5)", lambda: photo_mod.bilateral(np.zeros((N, M, 5)))),
         ("кадр (n,)", lambda: photo_mod.bilateral(np.zeros(N))),
         ("denoise с чужим параметром",
          lambda: photo_mod.denoise(values, True, radius=-1)),
@@ -921,7 +1006,6 @@ def test_r_types_have_contrast():
 
 def test_r_types_scale_without_pil():
     """Один и тот же относительный паттерн на разных размерах"""
-    rng = np.random.default_rng(30)
     for r_type in ("snowman", "cat"):
         r_small = image_mod.create_matrix(r_type, 16, 16)
         r_big = image_mod.create_matrix(r_type, 128, 128)

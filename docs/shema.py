@@ -32,6 +32,8 @@ LANGS = {
         "title_exp": "exp₂",
         "title_round": "Округление",
         "title_out": "Выходная\nматрица",
+        "note": "Неположительные пикселы поднимаются до MIN_VALUE = 1 "
+                "перед log₂\nи возвращаются после округления",
     },
     "en": {
         "title_in": "Input\nmatrix",
@@ -46,6 +48,8 @@ LANGS = {
         "title_exp": "exp₂",
         "title_round": "Round",
         "title_out": "Output\nmatrix",
+        "note": "Non-positive pixels are lifted to MIN_VALUE = 1 "
+                "before log₂\nand restored after rounding",
     },
 }
 
@@ -53,7 +57,7 @@ OUT_PATH = Path(__file__).with_name("homomorphic_schema.png")
 
 fig, ax = plt.subplots(figsize=(12.5, 5.7))
 ax.set_xlim(0.2, 12.65)   # поля по краям содержимого: справа — по блоку
-ax.set_ylim(0.45, 6.1)    # «анти-дополнение», сверху — по верхнему ряду
+ax.set_ylim(0.0, 6.1)     # снизу — сноска о MIN_VALUE, сверху — по верхнему
 ax.set_aspect('equal')
 ax.axis('off')
 
@@ -142,11 +146,16 @@ arrow(10.00, y4,   8.90, y4)      # → exp2
 arrow( 7.50, y4,   6.90, y4)      # exp2 → Округление
 arrow( 5.10, y4,   4.50, y4)      # Округление → Выходная матрица
 
+# Сноска: компенсация подъёма до MIN_VALUE.
+# Блок центрируется по x, строки выровнены влево внутри блока
+ax.text(6.4, 0.25, L["note"], ha='center', va='center', fontsize=8.5,
+        multialignment='left', zorder=4, color=BLACK)
+
 
 # Английская версия
 fig_en, ax_en = plt.subplots(figsize=(12.5, 5.7))
 ax_en.set_xlim(0.2, 12.65)
-ax_en.set_ylim(0.45, 6.1)
+ax_en.set_ylim(0.0, 6.1)
 ax_en.set_aspect('equal')
 ax_en.axis('off')
 L_en = LANGS["en"]
@@ -214,6 +223,10 @@ arrow_en(11.20, 2.15, 11.20, 1.55)
 arrow_en(10.00, y4,   8.90, y4)
 arrow_en( 7.50, y4,   6.90, y4)
 arrow_en( 5.10, y4,   4.50, y4)
+
+# Footnote: MIN_VALUE lifting compensation (same alignment as RU note)
+ax_en.text(6.4, 0.25, L_en["note"], ha='center', va='center', fontsize=8.5,
+           multialignment='left', zorder=4, color=BLACK)
 
 fig.savefig(OUT_PATH, dpi=200, bbox_inches='tight',
             facecolor='white', edgecolor='none')

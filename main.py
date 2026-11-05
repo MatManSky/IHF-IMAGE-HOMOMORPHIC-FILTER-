@@ -80,8 +80,8 @@ def test_black_square_info_16_16() -> None:
     e, r, i = create_image("const", "black_square", 16, 16)
     f = homomorphic_filter("allpass", "allpass", 1.0, 0.0)
 
-    print(f"E: const, R: black_square, n: 16, m: 16, allpass, "
-          f"lf_gain=1.0, hf_gain=0.0")
+    print("E: const, R: black_square, n: 16, m: 16, allpass, "
+          "lf_gain=1.0, hf_gain=0.0")
     _print_matrix("E", e)
     _print_matrix("R", r)
     f.apply_info(i)
