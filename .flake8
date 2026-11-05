@@ -1,0 +1,31 @@
+[flake8]
+max-line-length = 79
+exclude =
+    .git,
+    .venv,
+    venv,
+    __pycache__,
+    build,
+    dist,
+    scratch,
+    .pytest_cache
+# Стиль проекта: одна пустая строка между функциями (E302/E305),
+# краткий пробел в инлайн-комментариях (E261/E265) и выравнивающие
+# отступы в диаграммах (E127/E201/E251) — осознанный выбор, а не поломка.
+# CI проверяет главное: правило 80 (E501), F-класс, хвосты W291/W292
+extend-ignore =
+    E127,
+    E201,
+    E251,
+    E261,
+    E265,
+    E302,
+    E303,
+    E305,
+    W391
+# tests и examples: импорты проекта идут после sys.path.insert — E402
+per-file-ignores =
+    tests/test_all.py:E402
+    tests/synthetic_images.py:E402
+    examples/bw_image.py:E402
+    examples/color_image.py:E402
