@@ -234,11 +234,11 @@ def _pad_to_power_of_two(data: list, mode: str = "zero") -> list:
             mirror = [cols - 1 - k % cols for k in range(target_cols - cols)]
             data = [list(row) + [row[j] for j in mirror] for row in data]
 
-        if target_rows > rows:
-            if mode == "zero":
-                blank = [mpc(0)] * target_cols
-                extra = [list(blank) for _ in range(target_rows - rows)]
-                data = list(data) + extra
+    if target_rows > rows:
+        if mode == "zero":
+            blank = [mpc(0)] * target_cols
+            extra = [list(blank) for _ in range(target_rows - rows)]
+            data = list(data) + extra
         else:
             mirror = [rows - 1 - k % rows for k in range(target_rows - rows)]
             data = list(data) + [list(data[j]) for j in mirror]
