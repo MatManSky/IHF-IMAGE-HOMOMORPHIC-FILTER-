@@ -69,6 +69,9 @@ brew install gmp mpfr libmpc
 
 ### Запуск
 
+После активации окружения `python` работает на всех ОС (venv создаёт и
+`python`, и `python3`). Без активации на Linux/macOS используйте `python3`.
+
 ```bash
 python main.py                      # тесты фильтра / filter tests
 python examples/bw_image.py         # Фотография в оттенках серого
@@ -78,7 +81,7 @@ python examples/color_image.py      # Цветная фотография
 ### Тесты
 
 ```bash
-python -m pytest tests/ -q          # 96 тестов / 96 tests
+python -m pytest tests/ -q          # 100 тестов / 100 tests
 python tests/test_all.py            # то же без pytest
 ```
 
@@ -149,6 +152,10 @@ brew install gmp mpfr libmpc
 
 ### Run
 
+After activating the environment, `python` works on every OS (the venv
+provides both `python` and `python3`). Without activation, use `python3`
+on Linux/macOS.
+
 ```bash
 python main.py                  # filter tests
 python examples/bw_image.py     # Grayscale photo
@@ -158,6 +165,6 @@ python examples/color_image.py  # Color photo
 ### Tests
 
 ```bash
-python -m pytest tests/ -q          # 96 tests
+python -m pytest tests/ -q          # 100 tests
 python tests/test_all.py            # same without pytest
 ```

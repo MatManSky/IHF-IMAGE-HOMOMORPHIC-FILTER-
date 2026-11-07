@@ -4,23 +4,30 @@
 
 ## Homomorphic image filtering using arbitrary-precision arithmetic
 
-**Version**: 0.80
+**Version**: 0.85
 
 **Model**: `I = E·R` → `log₂` → F → spectrum split into LF and HF components → per-component processing → recombination → F⁻¹ → `exp₂` → rounding.
 
 **Implemented**: the basic pipeline, grayscale and color photo processing,
-96 tests and partially documentation.
+tests and partially documentation.
 
 ![Homomorphic filter stages](docs/homomorphic_schema_en.png)
 
 ## Installation
 
 ```bash
-python -m venv .venv && pip install -r requirements.txt
+python -m venv .venv              # Windows (PowerShell)
+python3 -m venv .venv             # Linux / macOS
+
+.venv\Scripts\Activate.ps1        # activate: Windows (PowerShell)
+source .venv/bin/activate         # activate: Linux / macOS
+
+pip install -r requirements.txt
 ```
 
-Details, virtual environment activation for Windows/Linux/macOS, and system
-dependencies (`libgmp`, `libmpfr`, `libmpc`) — see [INSTALL.md](INSTALL.md).
+The run and test commands below assume an activated environment
+(`python` works on every OS inside it). Details and system dependencies
+(`libgmp`, `libmpfr`, `libmpc`) — see [INSTALL.md](INSTALL.md).
 
 ## Running
 
@@ -167,7 +174,7 @@ Complete documentation for parameter configuration is still in development [docs
 ## Tests
 
 ```bash
-python -m pytest tests/ -q          # 96 tests
+python -m pytest tests/ -q          # tests
 python tests/test_all.py            # same without pytest
 ```
 

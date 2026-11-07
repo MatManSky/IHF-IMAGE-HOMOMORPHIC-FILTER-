@@ -4,22 +4,29 @@
 
 ## Гомоморфная фильтрация изображений в арифметике произвольной точности
 
-**Версия:** 0.80
+**Версия:** 0.85
 
 **Базовая модель:** `I = E·R` → `log₂` → F → разделение спектра на НЧ и ВЧ → обработка частей → соединение → F^-1 → `exp₂` → округление.
 
 **Реализовано:** базовая модель, обработка в оттенках серого и цветных фотографий,
-96 тестов и частично документация.
+тесты и частично документация.
 
 ![Стадии гомоморфного фильтра](docs/homomorphic_schema.png)
 
 ## Установка
 
 ```bash
-python -m venv .venv && pip install -r requirements.txt
+python -m venv .venv                  # Windows (PowerShell)
+python3 -m venv .venv                 # Linux / macOS
+
+.venv\Scripts\Activate.ps1            # активация: Windows (PowerShell)
+source .venv/bin/activate             # активация: Linux / macOS
+
+pip install -r requirements.txt
 ```
 
-Подробности, активация окружения под Windows/Linux/macOS и системные
+Команды запуска и тестов ниже предполагают активированное окружение
+(в нём `python` работает на всех ОС). Подробности и системные
 зависимости (`libgmp`, `libmpfr`, `libmpc`) — в [INSTALL.md](INSTALL.md).
 
 Запуск:
@@ -183,7 +190,7 @@ python docs/architecture.py --en     # + EN-версия
 ## Тесты
 
 ```bash
-python -m pytest tests/ -q          # 96 тестов
+python -m pytest tests/ -q          # тесты
 python tests/test_all.py            # то же без pytest
 ```
 
