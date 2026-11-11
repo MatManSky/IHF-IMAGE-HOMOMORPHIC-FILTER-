@@ -4,7 +4,7 @@
 
 ## Homomorphic image filtering using arbitrary-precision arithmetic
 
-**Version**: 0.85
+**Version**: 0.90
 
 **Model**: `I = E·R` → `log₂` → F → spectrum split into LF and HF components → per-component processing → recombination → F⁻¹ → `exp₂` → rounding.
 
@@ -34,7 +34,8 @@ The run and test commands below assume an activated environment
 ```bash
 python main.py                  # filter tests
 python examples/bw_image.py     # Grayscale photo
-python examples/color_image.py  # Color photo
+python examples/color_image_ycbcr.py # Color photo (YCbCr)
+python examples/color_image.py  # Color photo (RGB)
 ```
 
 ## Usage

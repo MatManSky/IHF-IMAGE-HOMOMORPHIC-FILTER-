@@ -250,6 +250,33 @@ def _crop(data: list, n: int, m: int) -> list:
     return [row[:m] for row in data[:n]]
 
 
+def _is_mpfr_matrix(image) -> bool:
+    # Матрица (n, m) значений mpfr: кадр уже в высокой точности
+    if isinstance(image, (list, tuple)) and len(image) > 0:
+        first = image[0]
+        return (isinstance(first, (list, tuple)) and len(first) > 0
+                and isinstance(first[0], mpfr))
+    return False
+
+
+def _exp2_rows(data: list, n: int, m: int) -> list:
+    # exp2 действительной части в MPFR без округления
+    exp2 = gmpy2.exp2
+    cache: dict = {}
+    out = []
+    for row in data[:n]:
+        line = []
+        for v in row[:m]:
+            r = v.real
+            e = cache.get(r)
+            if e is None:
+                e = exp2(r)
+                cache[r] = e
+            line.append(e)
+        out.append(line)
+    return out
+
+
 def _print_dataset(label: str, data) -> None:
     """
     Печатает содержимое массива (вход, фильтр, выход).
@@ -278,6 +305,9 @@ class homomorphic_filter:
 
     Кадр произвольного размера для БПФ radix-2 дополняется:
     f.apply(photo, pad="zero") или f.apply(photo, pad="reflect")
+
+    Если кадр приходит и уходит в MPFR (цвет в YCbCr),
+    применяется apply_mpfr: без промежуточных округлений.
     """
 
     def __init__(
@@ -323,6 +353,16 @@ class homomorphic_filter:
         self._response_size = None
         self._response_parts = None
 
+    def _lifted_pixels(self, image, mpfr_in: bool, n: int, m: int):
+        # Пикселы, которые _logarithm поднимет до MIN_VALUE перед log2.
+        # numpy поднимает v < MIN_VALUE и на выходе возвращает
+        # уровень вычитанием MIN_VALUE; mpfr поднимает v <= 0 и на выходе
+        # возвращает точный ноль.
+        if mpfr_in:
+            return [(i, j) for i, row in enumerate(image)
+                    for j, v in enumerate(row) if v <= 0]
+        return np.asarray(image, dtype=np.float64) < MIN_VALUE
+
     def _get_response(self, size: tuple, verbose: bool) -> tuple:
         # S * (lf_gain*ФНЧ + hf_gain*ФВЧ)
         if self._response_size != size or self._response is None:
@@ -348,35 +388,42 @@ class homomorphic_filter:
 
     def apply(
         self,
-        image: np.ndarray,
+        image,
         pad: str = None,
         window: str = None,
-    ) -> np.ndarray:
+        as_float: bool = False,
+    ):
         """
         Применить гомоморфный фильтр к изображению.
         (обработка в mpfr без промежуточных округлений)
 
         Параметры:
             image: входная матрица формы (n, m), значения > 0
-                   (numpy.ndarray; список списков приводится к ndarray)
+                   (numpy.ndarray; список списков приводится к ndarray;
+                   матрица mpfr-значений проходит весь конвейер в MPFR)
             pad: "zero" — дополнить кадр нулями до степени двойки,
                  "reflect" — дополнить зеркально;
             window: имя окна из filtration, после ОБПФ окно компенсируется
+            as_float: False (по умолчанию) — int64 с округлением;
+                      True — без округления: float64 при numpy-входе,
+                      матрица mpfr при mpfr-входе
 
         Возвращает:
-            numpy.ndarray: результат в формате входной матрицы (int64);
+            numpy.ndarray: результат в формате входной матрицы (int64
+            при as_float=False; float64 при as_float=True);
             пикселы, поднятые до MIN_VALUE перед log2, возвращаются
             к исходному значению
 
         Исключения:
             ValueError: если форма входной матрицы не (n, m)
         """
-        return self._apply(image, pad, window, verbose=False)
+        return self._apply(image, pad, window, verbose=False,
+                           as_float=as_float)
 
     # apply с отладочным выводом
     def apply_info(
         self,
-        image: np.ndarray,
+        image,
         pad: str = None,
         window: str = None,
     ) -> np.ndarray:
@@ -385,19 +432,24 @@ class homomorphic_filter:
     # Функция гомоморфной фильтрации (общая реализация для apply/apply_info)
     def _apply(
         self,
-        image: np.ndarray,
+        image,
         pad: str,
         window: str,
         verbose: bool,
-    ) -> np.ndarray:
+        as_float: bool = False,
+    ):
         _setup_precision()
-        image = np.asarray(image)
-        if image.ndim != 2:
-            raise ValueError(
-                f"Ожидается одноканальное изображение формы (n, m), "
-                f"получена форма {image.shape}"
-            )
-        n, m = image.shape
+        mpfr_in = _is_mpfr_matrix(image)
+        if not mpfr_in:
+            image = np.asarray(image)
+            if image.ndim != 2:
+                raise ValueError(
+                    f"Ожидается одноканальное изображение формы (n, m), "
+                    f"получена форма {image.shape}"
+                )
+            n, m = image.shape
+        else:
+            n, m = len(image), len(image[0])
 
         step = 0
 
@@ -411,7 +463,7 @@ class homomorphic_filter:
         report("input I", image)
 
         # 1. Логарифмирование
-        lifted = np.asarray(image, dtype=np.float64) < MIN_VALUE
+        lifted = self._lifted_pixels(image, mpfr_in, n, m)
         log_data = self._logarithm(image)
         report("log2(I)", log_data)
 
@@ -459,21 +511,48 @@ class homomorphic_filter:
             report(f"division by window '{window}'", restored)
 
         # 5-6. Антилогарифмирование и округление для вывода
-        result = self._antilogarithm(restored, n, m)
+        if mpfr_in:
+            result = _exp2_rows(restored, n, m)
+            report("exp2 (mpfr)", result)
+            # 7. Компенсация: неположительные пикселы возвращаются к 0
+            for i, j in lifted:
+                result[i][j] = mpfr(0)
+            if as_float:
+                return result
+            round_away = gmpy2.round_away
+            return np.array([[int(round_away(v + _EPS)) for v in row]
+                             for row in result], dtype=np.int64)
+
+        result = self._antilogarithm(restored, n, m, as_float=as_float)
         report("exp2 and rounding", result)
 
         # 7. Компенсация подъёма до MIN_VALUE:
         # пикселы, поднятые перед log2, возвращаются к исходному уровню
         if lifted.any():
-            result[lifted] = np.maximum(
-                result[lifted] - MIN_VALUE, 0.0
-            ).astype(np.int64)
+            shifted = np.maximum(result[lifted] - MIN_VALUE, 0.0)
+            if not as_float:
+                shifted = shifted.astype(np.int64)
+            result[lifted] = shifted
             report("MIN_VALUE compensation", result)
 
         return result
 
-    def _logarithm(self, image: np.ndarray) -> list:
+    def _logarithm(self, image) -> list:
         # Логарифмирование по основанию 2.
+        # mpfr-вход (для ycbcr): log2 считается в MPFR
+        if _is_mpfr_matrix(image):
+            cache: dict = {}
+            out = []
+            for row in image:
+                line = []
+                for v in row:
+                    c = cache.get(v)
+                    if c is None:
+                        c = mpc(gmpy2.log2(v if v > 0 else mpfr(MIN_VALUE)))
+                        cache[v] = c
+                    line.append(c)
+                out.append(line)
+            return out
         arr = np.asarray(image, dtype=np.float64)
         count = int((arr <= 0).sum())
         if count:
@@ -497,14 +576,18 @@ class homomorphic_filter:
             out.append(line)
         return out
 
-    def _antilogarithm(self, data: list, n: int, m: int) -> np.ndarray:
+    def _antilogarithm(self, data: list, n: int, m: int,
+                       as_float: bool = False) -> np.ndarray:
         # Антилогарифмирование exp2 и округление к ближайшему целому.
+        # as_float=True — без округления
         vals = [v.real for row in data[:n] for v in row[:m]]
         total = n * m
         x = np.fromiter((float(v) for v in vals), dtype=np.float64,
                         count=total)
         with np.errstate(over="ignore", invalid="ignore"):
             y = np.exp2(x)
+        if as_float:
+            return y.reshape(n, m)
         ok = np.isfinite(y) & (y < 9.0e18)
         ok &= np.abs(y - (np.floor(y) + 0.5)) > (
             _ROUND_MARGIN * np.maximum(1.0, y)

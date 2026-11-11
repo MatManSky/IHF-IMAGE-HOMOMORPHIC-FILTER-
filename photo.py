@@ -22,7 +22,8 @@ import numpy as np
 from PIL import Image
 
 import filtration
-from color_filter import CHANNELS # CHANNELS = 3
+from color_filter import (CHANNELS, rgb_to_ycbcr, ycbcr_to_rgb)
+# CHANNELS = 3
 from filter import homomorphic_filter, MIN_VALUE # MIN_VALUE = 1.0
 
 
@@ -146,11 +147,26 @@ def _no_stretch(values: np.ndarray, maximum: float) -> np.ndarray:
 def _percentile_stretch(values: np.ndarray, maximum: float,
                         low: float = LOW_PERCENTILE,
                         high: float = HIGH_PERCENTILE) -> np.ndarray:
-    # Линейная растяжка отсечек low/high до 0..maximum.
+    # Линейная растяжка отсечек low/high до 0..maximum
     lo, hi = _limits(values, low, high)
     if hi <= lo:
         return values
     return (values - lo) * (maximum / (hi - lo))
+
+
+def _percentile_ycbcr_stretch(values: np.ndarray, maximum: float,
+                              low: float = LOW_PERCENTILE,
+                              high: float = HIGH_PERCENTILE) -> np.ndarray:
+    # Перцентильная растяжка только по яркости (Y)
+    source = np.asarray(values, dtype=np.float64)
+    if source.ndim != 3:
+        return _percentile_stretch(source, maximum, low, high)
+    ycc = rgb_to_ycbcr(source)
+    lo, hi = _limits(ycc[..., 0], low, high)
+    if hi <= lo:
+        return source
+    ycc[..., 0] = (ycc[..., 0] - lo) * (maximum / (hi - lo))
+    return ycbcr_to_rgb(ycc)
 
 
 def _gamma_stretch(values: np.ndarray, maximum: float,
@@ -167,6 +183,7 @@ def _gamma_stretch(values: np.ndarray, maximum: float,
 _output_types = {
     "no": _no_stretch,
     "percentile": _percentile_stretch,
+    "percentile_ycbcr": _percentile_ycbcr_stretch,
     "gamma": _gamma_stretch,
 }
 
@@ -263,10 +280,12 @@ class photo_filter:
         Параметры:
             values: матрица результата apply (диапазон не ограничен 0..255)
             output: "percentile" — линейная растяжка (по умолчанию),
+                    "percentile_ycbcr" — растяжка только по яркости Y,
                     "no" — только обрезка к 0..255,
                     "gamma" — гамма-коррекция после нормировки к [0, 1]
             **params: параметры выбранного режима:
-                    "percentile": low, high — перцентили-отсечки;
+                    "percentile", "percentile_ycbcr": low, high —
+                        перцентили-отсечки;
                     "gamma": gamma, low, high.
         """
         return _to_uint(values, 8, output, **params)

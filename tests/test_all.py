@@ -667,6 +667,134 @@ def test_color_parallel_matches_sequential():
         "пул процессов изменил результат фильтрации"
 
 
+# YCbCr-режим: фильтрация только Y, цвет сохраняется
+
+from color_filter import rgb_to_ycbcr, ycbcr_to_rgb
+
+
+def test_rgb_ycbcr_roundtrip():
+    """RGB -> YCbCr -> RGB в float64 обратимо с точностью ~1e-13"""
+    rng = np.random.default_rng(1)
+    rgb = rng.integers(0, 256, (64, 80, 3)).astype(np.float64)
+    back = ycbcr_to_rgb(rgb_to_ycbcr(rgb))
+    assert np.abs(back - rgb).max() < 1e-9, "round-trip исказил кадр"
+
+
+def test_ycbcr_y_matches_pillow_gray():
+    """Y-канал (BT.601) совпадает с Pillow L не хуже 1 уровня"""
+    rng = np.random.default_rng(2)
+    rgb = rng.integers(0, 256, (48, 64, 3)).astype(np.uint8)
+    y = np.rint(rgb_to_ycbcr(rgb.astype(np.float64))[..., 0])
+    gray = np.asarray(Image.fromarray(rgb, "RGB").convert("L"),
+                      dtype=np.float64)
+    assert np.abs(y - gray).max() <= 1.0, "Y не соответствует Rec.601"
+
+
+def test_apply_as_float_identity():
+    """as_float=True: float64 без округления, identity точен < 1e-9"""
+    rng = np.random.default_rng(31)
+    image = rng.integers(1, 256, (16, 24)).astype(np.float64)
+    f = homomorphic_filter(lf_gain=1.0, hf_gain=1.0, d0=4.0)
+    out = f.apply(image, pad="reflect", as_float=True)
+    assert out.dtype == np.float64, f"as_float dtype {out.dtype}"
+    assert np.abs(out - image).max() < 1e-9, \
+        "as_float identity исказил кадр сильнее 1e-9"
+
+
+def test_color_ycbcr_shape_and_dtype():
+    out = color_homomorphic_filter(lf_gain=0.8, hf_gain=1.8, d0=4.0,
+                                   pad="reflect", mode="ycbcr").apply(
+        _color_scene())
+    assert out.shape == (N, M, 3), f"ycbcr изменил форму: {out.shape}"
+    assert out.dtype == np.int64, f"ycbcr dtype {out.dtype}, нужен int64"
+
+
+def test_color_ycbcr_neutral_identity():
+    """lf_gain = hf_gain = 1 в ycbcr-режиме возвращает кадр точно"""
+    rng = np.random.default_rng(3)
+    rgb = rng.integers(1, 256, (16, 24, 3)).astype(np.float64)
+    f = color_homomorphic_filter(lf_gain=1.0, hf_gain=1.0, d0=4.0,
+                                 pad="reflect", mode="ycbcr")
+    out = f.apply(rgb)
+    assert np.abs(out.astype(np.float64) - rgb).max() <= 1.0, \
+        "единичное усиление в ycbcr-режиме исказило кадр"
+
+
+def test_color_ycbcr_keeps_alpha():
+    """RGBA в ycbcr-режиме: альфа возвращается без изменений"""
+    rng = np.random.default_rng(4)
+    rgba = rng.integers(1, 256, (16, 24, 4)).astype(np.float64)
+    f = color_homomorphic_filter(lf_gain=0.8, hf_gain=1.6, d0=4.0,
+                                 pad="reflect", mode="ycbcr")
+    out = f.apply(rgba)
+    assert out.shape == (16, 24, 4), f"ycbcr потерял альфу: {out.shape}"
+    assert np.array_equal(out[..., 3], np.floor(rgba[..., 3] + 0.5)), \
+        "ycbcr изменил альфу"
+
+
+def test_color_ycbcr_rejects_per_channel_gains():
+    """Поканальные усиления в ycbcr-режиме не определены"""
+    assert _raises(ValueError, color_homomorphic_filter,
+                   lf_gain=(0.9, 1.0, 1.1), mode="ycbcr"), \
+        "lf_gain-кортеж не отклонён в ycbcr-режиме"
+    assert _raises(ValueError, color_homomorphic_filter,
+                   hf_gain=(0.9, 1.0, 1.1), mode="ycbcr"), \
+        "hf_gain-кортеж не отклонён в ycbcr-режиме"
+
+
+def test_color_mode_rejects_unknown():
+    """Неизвестный режим цвета отклоняется (в т.ч. старое имя luma)"""
+    assert _raises(ValueError, color_homomorphic_filter, mode="luma"), \
+        "режим 'luma' не отклонён (доступны 'rgb' и 'ycbcr')"
+
+
+def _chroma_mean(arr: np.ndarray) -> float:
+    # Средняя хроматичность: mean(max - min) по каналам
+    a = np.asarray(arr, dtype=np.float64)[..., :3]
+    return float((a.max(axis=2) - a.min(axis=2)).mean())
+
+
+def _smooth_warm_scene(h=32, w=48) -> np.ndarray:
+    # Плавный тёплый градиент: сильная хроматика без шума
+    y, x = np.mgrid[0:h, 0:w]
+    return np.stack([
+        80 + 140 * x / w,
+        60 + 100 * x / w,
+        50 + 60 * (1 - y / h),
+    ], axis=2)
+
+
+def test_percentile_ycbcr_keeps_chroma():
+    """Растяжка по Y сохраняет хроматику; joint — раздувает"""
+    rgb = _smooth_warm_scene()
+    f = color_homomorphic_filter(lf_gain=0.5, hf_gain=2.0, d0=4.0,
+                                 pad="reflect", mode="ycbcr")
+    out = f.apply(rgb)
+    c_filt = _chroma_mean(out)
+    c_luma = _chroma_mean(photo_mod.photo_filter.to_uint8(
+        out, output="percentile_ycbcr"))
+    c_joint = _chroma_mean(photo_mod.photo_filter.to_uint8(out))
+    # ycbcr-растяжка: хроматика близка к фильтрам (ошибка = клиппинг)
+    assert abs(c_luma - c_filt) / c_filt < 0.15, \
+        f"percentile_ycbcr изменил хроматику: {c_filt:.1f}->{c_luma:.1f}"
+    # joint-растяжка при k>1 заметно раздувает цвет
+    assert c_joint > c_filt * 1.2, \
+        f"joint-растяжка не раздула хроматику (ожидался эффект): " \
+        f"{c_filt:.1f}->{c_joint:.1f}"
+
+
+def test_percentile_ycbcr_gray_matches_percentile():
+    """Для ч/б кадра percentile_ycbcr эквивалентен percentile"""
+    rng = np.random.default_rng(32)
+    image = rng.integers(1, 256, (16, 24)).astype(np.float64)
+    f = homomorphic_filter(lf_gain=0.7, hf_gain=1.8, d0=4.0)
+    out = f.apply(image, pad="reflect")
+    a = photo_mod.photo_filter.to_uint8(out)
+    b = photo_mod.photo_filter.to_uint8(out, output="percentile_ycbcr")
+    assert np.array_equal(a, b), "percentile_ycbcr разошёлся с " \
+        "percentile на ч/б кадре"
+
+
 # Температура освещения
 
 def _color_scene() -> np.ndarray:

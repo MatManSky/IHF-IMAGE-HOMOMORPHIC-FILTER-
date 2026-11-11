@@ -8,6 +8,7 @@ exclude =
     build,
     dist,
     scratch,
+    science,
     .pytest_cache
 # Стиль проекта: одна пустая строка между функциями (E302/E305),
 # краткий пробел в инлайн-комментариях (E261/E265) и выравнивающие
@@ -29,3 +30,4 @@ per-file-ignores =
     tests/synthetic_images.py:E402
     examples/bw_image.py:E402
     examples/color_image.py:E402
+    examples/color_image_ycbcr.py:E402
