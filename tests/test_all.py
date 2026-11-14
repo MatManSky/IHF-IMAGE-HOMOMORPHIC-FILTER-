@@ -745,7 +745,83 @@ def test_color_ycbcr_rejects_per_channel_gains():
 def test_color_mode_rejects_unknown():
     """Неизвестный режим цвета отклоняется (в т.ч. старое имя luma)"""
     assert _raises(ValueError, color_homomorphic_filter, mode="luma"), \
-        "режим 'luma' не отклонён (доступны 'rgb' и 'ycbcr')"
+        "режим 'luma' не отклонён (доступны 'rgb', 'ycbcr', 'rct')"
+
+
+def test_rct_forward_inverse_roundtrip():
+    """RCT прямая+обратная конверсия точна (0 LSB) на 256^3 подмножестве"""
+    rng = np.random.default_rng(7)
+    rgb = rng.integers(0, 256, (16, 16, 3)).astype(np.float64)
+    from color_filter import _rct_forward, _rct_inverse
+    back = _rct_inverse(_rct_forward(rgb))
+    assert np.abs(back.astype(np.float64) - rgb).max() == 0.0, \
+        "RCT round-trip исказил кадр"
+
+
+def test_color_rct_shape_and_dtype():
+    out = color_homomorphic_filter(lf_gain=0.8, hf_gain=1.8, d0=4.0,
+                                   pad="reflect", mode="rct").apply(
+        _color_scene())
+    assert out.shape == (N, M, 3), f"rct изменил форму: {out.shape}"
+    assert out.dtype == np.int64, f"rct dtype {out.dtype}, нужен int64"
+
+
+def test_color_rct_neutral_identity():
+    """lf_gain = hf_gain = 1 в rct-режиме возвращает кадр точно"""
+    rng = np.random.default_rng(3)
+    rgb = rng.integers(1, 256, (16, 24, 3)).astype(np.float64)
+    f = color_homomorphic_filter(lf_gain=1.0, hf_gain=1.0, d0=4.0,
+                                 pad="reflect", mode="rct")
+    out = f.apply(rgb)
+    assert np.abs(out.astype(np.float64) - rgb).max() <= 1.0, \
+        "единичное усиление в rct-режиме исказило кадр"
+
+
+def test_color_rct_keeps_alpha():
+    """RGBA в rct-режиме: альфа возвращается без изменений"""
+    rng = np.random.default_rng(4)
+    rgba = rng.integers(1, 256, (16, 24, 4)).astype(np.float64)
+    f = color_homomorphic_filter(lf_gain=0.8, hf_gain=1.6, d0=4.0,
+                                 pad="reflect", mode="rct")
+    out = f.apply(rgba)
+    assert out.shape == (16, 24, 4), f"rct потерял альфу: {out.shape}"
+    assert np.array_equal(out[..., 3], np.floor(rgba[..., 3] + 0.5)), \
+        "rct изменил альфу"
+
+
+def test_color_rct_rejects_per_channel_gains():
+    """Поканальные усиления в rct-режиме не определены"""
+    assert _raises(ValueError, color_homomorphic_filter,
+                   lf_gain=(0.9, 1.0, 1.1), mode="rct"), \
+        "lf_gain-кортеж не отклонён в rct-режиме"
+    assert _raises(ValueError, color_homomorphic_filter,
+                   hf_gain=(0.9, 1.0, 1.1), mode="rct"), \
+        "hf_gain-кортеж не отклонён в rct-режиме"
+
+
+def test_color_rct_identity_exact():
+    """RCT identity (lf=hf=1) точен 0 LSB (BT.601 даёт 5.7e-14)"""
+    rng = np.random.default_rng(3)
+    rgb = rng.integers(1, 256, (8, 8, 3)).astype(np.float64)
+    f = color_homomorphic_filter(lf_gain=1.0, hf_gain=1.0, d0=4.0,
+                                 pad="reflect", mode="rct")
+    out = f.apply(rgb)
+    diff = np.abs(out.astype(np.float64) - rgb).max()
+    assert diff == 0.0, \
+        f"rct identity дал {diff}, ожидался 0.0"
+
+
+def test_color_rct_keeps_chroma():
+    """Фильтрация Y'' сохраняет хроматичность: R,G,B сдвигаются
+    на одну величину, поэтому max-min по каналам не меняется"""
+    rgb = _smooth_warm_scene()
+    f = color_homomorphic_filter(lf_gain=0.5, hf_gain=2.0, d0=4.0,
+                                 pad="reflect", mode="rct")
+    out = f.apply(rgb)
+    c_in = _chroma_mean(rgb)
+    c_out = _chroma_mean(out)
+    assert abs(c_out - c_in) / c_in < 0.05, \
+        f"rct изменил хроматику: {c_in:.2f}->{c_out:.2f}"
 
 
 def _chroma_mean(arr: np.ndarray) -> float:

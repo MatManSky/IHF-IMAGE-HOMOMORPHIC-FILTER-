@@ -9,16 +9,23 @@ parallel=True — только параллельно, parallel=None —
 последовательно.
 
 Режимы (mode):
-    "ycbcr" (по умолчанию) — кадр переводится в YCbCr (ITU-R BT.601)
+    "rgb" (по умолчанию) — поканальная фильтрация, усиления задаются
+        по каналам;
+    "ycbcr" — кадр переводится в YCbCr (ITU-R BT.601)
         в MPFR, фильтруется только яркость Y, кадр переводится обратно;
         усиления должны быть скалярами;
-    "rgb" — поканальная фильтрация, усиления задаются по каналам.
+    "rct" — кадр переводится в обратимое цветовое пространство RCT
+        (JPEG XS, ISO/IEC 21122) в MPFR, фильтруется только Y'',
+        Cr''/Cb'' не изменяются; усиления должны быть скалярами.
+        Y'' = (R+2G+B)/4, Cr'' = R-G, Cb'' = B-G; конверсия обратима
+        точно (0 LSB), но веса яркости отличаются от BT.601.
 
 Ссылки:
  1. Красильников Н.Н. Цифровая обработка 2D- и 3D-изображений: учеб.
     пособие. СПб.: БХВ-Петербург, 2011. 608 с.
  2. ITU-R BT.601-7. Encoding-Parameter Digital Values of Constant
     Luminance in the Component Digital Television Interface. 2011.
+ 3. ISO/IEC 21122-1:2022.
 """
 
 import multiprocessing
@@ -40,7 +47,7 @@ CHANNELS = 3
 _PARALLEL_MIN_PIXELS = 16384
 
 # Допустимые режимы обработки цвета
-_COLOR_MODES = ("rgb", "ycbcr")
+_COLOR_MODES = ("rgb", "ycbcr", "rct")
 
 _POOL = None
 _POOL_LOCK = threading.Lock()
@@ -52,6 +59,9 @@ _K_B = mpfr("0.114")
 _HALF = mpfr("0.5")
 _TWO = mpfr(2)
 _OFF = mpfr(128)
+
+# Коэффициенты RCT (JPEG XS): деление на 4 в двоичной арифметике
+_FOUR = mpfr(4)
 
 
 # Преобразование между RGB и YCbCr (ITU-R BT.601)
@@ -99,7 +109,7 @@ def _rgb_to_ycbcr_mpfr(rgb: np.ndarray) -> list:
 
 
 def _y_of_ycbcr(ycbcr: list) -> list:
-    # Матрица Y из списка кортежей (Y, Cb, Cr) — вход для фильтра
+    # Матрица яркости из (Y, Cb, Cr) или (Y'', Cr'', Cb'')
     return [[px[0] for px in line] for line in ycbcr]
 
 
@@ -122,6 +132,41 @@ def _ycbcr_to_rgb_mpfr(ycbcr: list) -> np.ndarray:
             g = y - (_K_R * (r - y) + _K_B * (b - y)) / _K_G
             row.append((int(floor(r + half)), int(floor(g + half)),
                         int(floor(b + half))))
+        out.append(row)
+    return np.array(out, dtype=np.int64)
+
+
+def _rct_forward(rgb: np.ndarray) -> list:
+    # (n, m, 3) float64 -> (n, m) кортежей mpfr (Y'', Cr'', Cb'').
+    # Коэффициенты — степени двойки, поэтому точно и обратимо
+    out = []
+    for row in np.asarray(rgb, dtype=np.float64):
+        line = []
+        for r, g, b in row:
+            mr, mg, mb = mpfr(r), mpfr(g), mpfr(b)
+            y = (mr + _TWO * mg + mb) / _FOUR
+            line.append((y, mr - mg, mb - mg))
+        out.append(line)
+    return out
+
+
+def _merge_y_rct(rct: list, y_new: list) -> list:
+    # Заменить Y'' на отфильтрованный, сохранив Cr''/Cb''
+    return [[(yv, px[1], px[2]) for px, yv in zip(line, ynew)]
+            for line, ynew in zip(rct, y_new)]
+
+
+def _rct_inverse(rct: list) -> np.ndarray:
+    # (n, m) кортежей mpfr (Y'', Cr'', Cb'') -> int64 (n, m, 3).
+    floor = gmpy2.floor
+    half = _HALF
+    out = []
+    for line in rct:
+        row = []
+        for y, cr, cb in line:
+            g = y - (cr + cb) / _FOUR
+            row.append((int(floor(cr + g + half)), int(floor(g + half)),
+                        int(floor(cb + g + half))))
         out.append(row)
     return np.array(out, dtype=np.int64)
 
@@ -173,9 +218,14 @@ class color_homomorphic_filter:
         f = color_homomorphic_filter(lf_gain=(0.99, 1.0, 1.01), hf_gain=1.0)
         result = f.apply(color_image)  # (n, m, 3); RGBA вернёт (n, m, 4)
 
-        # YCbCr-режим (фильтруется только яркость Y:
+        # YCbCr-режим (фильтруется только яркость Y):
         f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0,
                                      mode="ycbcr")
+        result = f.apply(color_image)  # (n, m, 3); RGBA вернёт (n, m, 4)
+
+        # RCT-режим (JPEG XS, фильтруется только Y'', обратимо точно):
+        f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0,
+                                     mode="rct")
         result = f.apply(color_image)  # (n, m, 3); RGBA вернёт (n, m, 4)
     """
 
@@ -205,14 +255,15 @@ class color_homomorphic_filter:
         self._pad = pad
         self._window = window
         self._mode = mode
-        # В ycbcr-режиме усиления применяются только к Y-каналу
-        if mode == "ycbcr":
+        # В режимах ycbcr и rct усиления применяются к яркости
+        if mode in ("ycbcr", "rct"):
             for name, gains in (("lf_gain", self._lf_gain),
                                 ("hf_gain", self._hf_gain)):
                 if len(set(gains)) != 1:
                     raise ValueError(
-                        f"В ycbcr-режиме {name} должен быть скаляром "
-                        f"(применяется к Y-каналу), получено {gains}."
+                        f"В {mode}-режиме {name} должен быть скаляром "
+                        f"(применяется к каналу яркости), "
+                        f"получено {gains}."
                     )
         # Итоговое усиление
         self._filters = {}
@@ -253,6 +304,8 @@ class color_homomorphic_filter:
         rgb = image[:, :, :CHANNELS]
         if self._mode == "ycbcr":
             result = self._apply_ycbcr(rgb)
+        elif self._mode == "rct":
+            result = self._apply_rct(rgb)
         else:
             result = self._apply_rgb(rgb, parallel)
         if image.shape[2] == CHANNELS + 1:
@@ -270,6 +323,15 @@ class color_homomorphic_filter:
         y_new = single.apply(_y_of_ycbcr(ycc), pad=self._pad,
                              window=self._window, as_float=True)
         return _ycbcr_to_rgb_mpfr(_merge_y(ycc, y_new))
+
+    def _apply_rct(self, rgb: np.ndarray) -> np.ndarray:
+        # Фильтруется только Y'' (RCT), Cr''/Cb'' не изменяются.
+        rct = _rct_forward(rgb)
+        lf, hf = self._lf_gain[0], self._hf_gain[0]
+        single = self._filters[(lf, hf)]
+        y_new = single.apply(_y_of_ycbcr(rct), pad=self._pad,
+                             window=self._window, as_float=True)
+        return _rct_inverse(_merge_y_rct(rct, y_new))
 
     def _apply_rgb(self, rgb: np.ndarray,
                    parallel: bool = None) -> np.ndarray:
