@@ -21,23 +21,27 @@ LANGS = {
                  "гомоморфной фильтрации",
         "main": ("main.py", "синтетические сцены\n(I = E·R)"),
         "tests": ("tests/test_all.py",
-                  "96 тестов инвариантов;\nsynthetic_images.py —\n"
+                  "117 тестов инвариантов;\nsynthetic_images.py —\n"
                   "сцены для тестов"),
         "processing": ("processing.py", "temperature_gains (R, G, B)\n"
                                         "shift_temperature, balance,\n"
                                         "make_colder, make_warmer"),
         "bw_example": ("examples/bw_image.py", "ЧБ: pic1.png →\n"
                                                "pic1_processed.png"),
-        "color_example": ("examples/color_image.py", "цвет: pic3_small.png →\n"
-                                                     "pic3_small_cold.png"),
+        "color_example": ("examples/color_image*.py",
+                          "цвет: pic3_small → _cold\n"
+                          "ycbcr: → _ycbcr\n"
+                          "(mode=rgb | ycbcr)"),
         "image": ("image.py", "create_image() (E, R, I = E·R)\n"
                               "набор типов E и R"),
         "color_filter": ("color_filter.py", "color_homomorphic_filter\n"
-                                            "(n, m, 3) — поканально\n"
-                                            "усиления: скаляр или (R, G, B)"),
+                         "(n, m, 3): mode = rgb | ycbcr | rct\n"
+                         "ycbcr/rct: фильтр только яркость,\n"
+                         "усиления — только скаляр"),
         "photo": ("photo.py", "read_gray/write_gray, read_rgb/write_rgb\n"
                               "photo_filter\n"
-                              "to_uint8/10/12/16: no | percentile | gamma\n"
+                              "to_uint8/10/12/16: no | percentile\n"
+                              "| percentile_ycbcr | gamma\n"
                               "bilateral, denoise — билатерный (выкл)"),
         "filter_core": ("filter.py — ядро гомоморфной фильтрации "
                         "(mpfr/mpc, 256 бит)",
@@ -49,10 +53,12 @@ LANGS = {
                         "объединение (НЧ + ВЧ)\n"
                         "→ обратное БПФ → анти-дополнение → exp2 → "
                         "округление → выход int64\n"
-                        "pad = zero | reflect, окна hann | tukey "
-                        "(делятся после ОБПФ);\n"
-                         "MIN_VALUE = 1 поднимает неположительную яркость, "
-                         "компенсируется на выходе"),
+                         "pad = zero | reflect, окна hann | tukey "
+                         "(делятся после ОБПФ);\n"
+                         "as_float=True — выход без округления, mpfr-вход "
+                         "не покидает MPFR до exp2;\n"
+                          "MIN_VALUE = 1 поднимает неположительную яркость, "
+                          "компенсируется на выходе"),
         "filtration": ("filtration.py — функции частотной области (mpfr)",
                        "get_filter: lp/hp Баттерворт · Чебышёв-1 · "
                        "Гаусс · allpass "
@@ -76,24 +82,27 @@ LANGS = {
                  "homomorphic image filtering",
         "main": ("main.py", "synthetic scenes\n(I = E·R)"),
         "tests": ("tests/test_all.py",
-                  "96 invariant tests;\nsynthetic_images.py —\n"
+                  "117 invariant tests;\nsynthetic_images.py —\n"
                   "scene generators"),
         "processing": ("processing.py", "temperature_gains (R, G, B)\n"
                                         "shift_temperature, balance,\n"
                                         "make_colder, make_warmer"),
         "bw_example": ("examples/bw_image.py", "BW: pic1.png →\n"
                                                "pic1_processed.png"),
-        "color_example": ("examples/color_image.py",
-                          "color: pic3_small.png →\n"
-                                                     "pic3_small_cold.png"),
+        "color_example": ("examples/color_image*.py",
+                           "color: pic3_small → _cold\n"
+                          "ycbcr: → _ycbcr\n"
+                          "(mode=rgb | ycbcr)"),
         "image": ("image.py", "create_image() (E, R, I = E·R)\n"
                               "E and R types set"),
         "color_filter": ("color_filter.py", "color_homomorphic_filter\n"
-                                            "(n, m, 3) per-channel\n"
-                                            "gains: scalar or (R, G, B)"),
+                         "(n, m, 3): mode = rgb | ycbcr | rct\n"
+                         "ycbcr/rct: filter on luma only,\n"
+                         "gains must be scalars"),
         "photo": ("photo.py", "read_gray/write_gray, read_rgb/write_rgb\n"
                               "photo_filter\n"
-                              "to_uint8/10/12/16: no | percentile | gamma\n"
+                              "to_uint8/10/12/16: no | percentile\n"
+                              "| percentile_ycbcr | gamma\n"
                               "bilateral, denoise — bilateral (off)"),
         "filter_core": ("filter.py — homomorphic filtering core "
                         "(mpfr/mpc, 256 bit)",
@@ -105,10 +114,12 @@ LANGS = {
                         "→ combine (LF + HF)\n"
                         "→ inverse DFT → anti-padding → exp2 → round "
                         "→ output int64\n"
-                        "pad = zero | reflect, windows hann | tukey "
-                        "(divided after IDFT);\n"
-                         "MIN_VALUE = 1 lifts non-positive brightness, "
-                         "compensated at output"),
+                         "pad = zero | reflect, windows hann | tukey "
+                         "(divided after IDFT);\n"
+                         "as_float=True — output without rounding, mpfr input "
+                         "stays in MPFR up to exp2;\n"
+                          "MIN_VALUE = 1 lifts non-positive brightness, "
+                          "compensated at output"),
         "filtration": ("filtration.py — frequency-domain functions (mpfr)",
                        "get_filter: lp/hp Butterworth · Chebyshev-1 · "
                        "Gaussian · allpass "

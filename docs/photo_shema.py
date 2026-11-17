@@ -1,15 +1,18 @@
 """
-Схемы применения гомоморфного фильтра к фотографиям (две картинки):
+Схемы применения гомоморфного фильтра к фотографиям (три картинки):
 
-    photo_schema_bw.png     — кадр в оттенках серого (examples/bw_image.py)
-    photo_schema_color.png  — цветной кадр     (examples/color_image.py)
+    photo_schema_bw.png       — кадр в оттенках серого (examples/bw_image.py)
+    photo_schema_color.png    — поканальный цвет
+                                (examples/color_image.py)
+    photo_schema_ycbcr.png    — цвет по яркости YCbCr
+                                (examples/color_image_ycbcr.py)
 
 Перед генерацией — check_api(): имена, значения по умолчанию и dtype-цепочка
 сверяются с photo.py, color_filter.py, processing.py, filtration.py, filter.py;
 при расхождении схем со скрипт падает, а не рисует неверную картинку.
 
 Запуск:
-    python docs/photo_shema.py            # пишет обе схемы в docs/
+    python docs/photo_shema.py            # пишет все три схемы в docs/
     python docs/photo_shema.py --en       # + _en.png версии
     python docs/photo_shema.py --show     # и открывает окна просмотра
 """
@@ -26,8 +29,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 _OUT_BW = Path(__file__).with_name("photo_schema_bw.png")
 _OUT_COLOR = Path(__file__).with_name("photo_schema_color.png")
+_OUT_YCBCR = Path(__file__).with_name("photo_schema_ycbcr.png")
 _OUT_BW_EN = Path(__file__).with_name("photo_schema_bw_en.png")
 _OUT_COLOR_EN = Path(__file__).with_name("photo_schema_color_en.png")
+_OUT_YCBCR_EN = Path(__file__).with_name("photo_schema_ycbcr_en.png")
 
 LANGS = {
     "ru": {
@@ -51,6 +56,16 @@ LANGS = {
         ],
         "temp": ("make_colder / make_warmer — опция\n"
                  "lf_gain = (1−t, 1, 1+t): холоднее / теплее"),
+        "ycbcr": [
+            ("pic3_small.png\nфото на входе\n(PNG / JPEG)", False),
+            ("read_rgb\nRGB или RGBA:\nfloat64 (n, m, 3/4)", False),
+            ("BT.601 в mpfr,\nфильтр только Y,\nCb/Cr без изменений", False),
+            ("to_uint8\npercentile_ycbcr:\nрастяжка только по Y", False),
+            ("denoise\n(билатерный фильтр)\nвыкл",              True),
+            ("write_rgb\n8 бит, RGB или\nRGBA (n, m, 4)", False),
+        ],
+        "ycbcr_note": ("усиления — только скаляр (поканальные — ValueError);\n"
+                       "хроматика сохраняется точно: chroma 28.18 → 28.18"),
     },
     "en": {
         "bw": [
@@ -72,6 +87,16 @@ LANGS = {
         ],
         "temp": ("make_colder / make_warmer — option\n"
                  "lf_gain = (1−t, 1, 1+t): cooler / warmer"),
+        "ycbcr": [
+            ("pic3_small.png\ninput photo\n(PNG / JPEG)", False),
+            ("read_rgb\nRGB or RGBA:\nfloat64 (n, m, 3/4)", False),
+            ("BT.601 conversion\nin mpfr, filter Y,\nCb/Cr untouched", False),
+            ("to_uint8\npercentile_ycbcr:\nstretch on Y only", False),
+            ("denoise\n(bilateral filter)\ndisabled",                 True),
+            ("write_rgb\n8-bit, RGB or\nRGBA (n, m, 4)", False),
+        ],
+        "ycbcr_note": ("scalar gains only (per-channel raises ValueError);\n"
+                       "chroma preserved exactly: 28.18 → 28.18"),
     },
 }
 
@@ -92,7 +117,8 @@ def check_api() -> None:
     needed = {
         photo: ["read_gray", "write_gray", "read_rgb", "write_rgb",
                 "photo_filter", "bilateral", "denoise"],
-        color_filter: ["color_homomorphic_filter", "CHANNELS"],
+        color_filter: ["color_homomorphic_filter", "CHANNELS",
+                       "rgb_to_ycbcr", "ycbcr_to_rgb"],
         processing: ["temperature_gains", "make_colder", "make_warmer"],
         filtration: ["DEFAULT_LF_FILTER", "D0_DEFAULT"],
         ihf_filter: ["homomorphic_filter", "MIN_VALUE"],
@@ -113,6 +139,12 @@ def check_api() -> None:
     assert (sig(photo.photo_filter.__init__).parameters["pad"].default
             == "reflect")
     assert processing.temperature_gains(0.01) == (0.99, 1.0, 1.01)
+
+    # ycbcr-режим: параметр mode + отдельная растяжка по яркости
+    assert "mode" in sig(
+        color_filter.color_homomorphic_filter.__init__).parameters
+    assert "ycbcr" in color_filter._COLOR_MODES
+    assert "percentile_ycbcr" in photo._output_types
 
     # Цвет — только 8 бит: 10/12/16-битный вывод write_rgb отклоняет
     bad = Path(tempfile.gettempdir()) / "ihf_bad_dtype.png"
@@ -196,6 +228,13 @@ def render(lang: str) -> None:
     draw_box(ax, XS[2], 3.0, L["temp"], w=4.6, h=0.95, dashed=True)
     arrow(ax, XS[2], 2.52, XS[2], 1.83, dashed=True)
     save(ax, Path(__file__).with_name(f"photo_schema_color{suffix}.png"))
+
+    # examples/color_image_ycbcr.py
+    ax = new_sheet((0.1, 17.6), (0.45, 3.7))
+    chain(ax, 1.2, L["ycbcr"])
+    draw_box(ax, XS[2], 3.0, L["ycbcr_note"], w=5.6, h=0.95, dashed=True)
+    arrow(ax, XS[2], 2.52, XS[2], 1.83, dashed=True)
+    save(ax, Path(__file__).with_name(f"photo_schema_ycbcr{suffix}.png"))
 
 
 check_api()
