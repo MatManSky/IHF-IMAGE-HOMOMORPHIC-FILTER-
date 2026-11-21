@@ -583,7 +583,7 @@ def test_color_gray_matches_monochrome():
     assert diff.max() <= 1, f"серый канал разошёлся с моно на {diff.max()}"
 
 
-# RGBA: альфа проходит весь конвейер без потерь
+# RGBA: альфа проходит весь процесс без потерь
 
 def _rgba_frame() -> tuple:
     """uint8 RGBA с гарантированно прозрачным и непрозрачным пикселом"""

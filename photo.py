@@ -234,7 +234,7 @@ def _to_uint(values: np.ndarray, bits: int, output: str,
     return result
 
 
-# Шумоподавление: билатерный фильтр 
+# Шумоподавление: билатерный фильтр
 
 DENOISE_DEFAULT = False  # выключено
 DENOISE_RADIUS = 2          # окно (2*radius + 1)^2 = 5x5
@@ -314,7 +314,7 @@ class photo_filter:
 
     def _stage_active(self, stage: str, on: bool = None,
                       place: str = None) -> bool:
-        # Активен ли denoise на данном этапе конвейера ("before"/"after")
+        # Активен ли denoise на данном этапе ("before"/"after")
         enabled = self._denoise if on is None else bool(on)
         current = self._filter_place if place is None else place
         if not enabled or current == "off":

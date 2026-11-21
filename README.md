@@ -4,12 +4,14 @@
 
 ## Гомоморфная фильтрация изображений в арифметике произвольной точности
 
-**Версия:** 0.90
+**Версия:** 0.95
 
 **Базовая модель:** `I = E·R` → `log₂` → F → разделение спектра на НЧ и ВЧ → обработка частей → соединение → F^-1 → `exp₂` → округление.
 
-**Реализовано:** базовая модель, обработка в оттенках серого и цветных фотографий,
-тесты и частично документация.
+**Реализовано:** базовая модель, обработка в оттенках серого и цветных фотографий
+(поканально, по яркости BT.601 и обратимо по RCT), билатеральный
+шумоподавляющий фильтр до и/или после гомоморфного, тесты и частично
+документация.
 
 ![Стадии гомоморфного фильтра](docs/homomorphic_schema.png)
 
@@ -26,7 +28,7 @@ pip install -r requirements.txt
 ```
 
 Команды запуска и тестов ниже предполагают активированное окружение
-(в нём `python` работает на всех ОС). Подробности и системные
+(в котором `python` работает на всех ОС). Подробности и системные
 зависимости (`libgmp`, `libmpfr`, `libmpc`) — в [INSTALL.md](INSTALL.md).
 
 Запуск:
@@ -66,6 +68,16 @@ write_gray("out.png", f.to_uint8(f.apply(photo)))
 
 ### Цветная фотография
 
+Три режима обработки (`mode`):
+
+| Режим | Что фильтруется | Особенности |
+|---|---|---|
+| `"rgb"` (по умолчанию) | каждый канал R, G, B независимо | единственный способ менять **цветовую температуру** (усиления по каналам) |
+| `"ycbcr"` | только яркость `Y` (ITU-R BT.601) | `Cb/Cr` сохраняется **точно**; в MPFR; растяжка по яркости `output="percentile_ycbcr"` |
+| `"rct"` | только псевдояркость `Y''` (ISO/IEC 21122) | **полностью обратим** (round-trip 0 LSB); веса яркости (0.25/0.50/0.25) отличаются от BT.601 |
+
+#### Поканальный RGB
+
 Каналы обрабатываются раздельно.
 
 ```python
@@ -85,6 +97,49 @@ write_rgb("out.png", photo_filter.to_uint8(f.apply(photo)))
 
 «Холоднее» (colder): `(0.99, 1.0, 1.01)`.
 
+Каналы считаются последовательно или параллельно (пул из трёх процессов):
+
+```python
+f.apply(photo, parallel=True)    # только параллельно
+f.apply(photo, parallel=False)   # только последовательно
+f.apply(photo)                   # None — автоматически от 128×128 px на канал
+```
+
+Параллельный и последовательный результаты **побитово совпадают**.
+По умолчанию выход считается быстрым путём (`exp2` в float64 с точным
+mpfr fallback); `use_mpfr=True` держит весь тракт канала в MPFR —
+тот же арифметический путь, что в `"ycbcr"`/`"rct"`:
+
+```python
+f.apply(photo, parallel=True, use_mpfr=True)
+```
+
+#### Обработка по яркости: YCbCr и RCT
+
+В этих режимах усиления обязаны быть **скалярами** (применяются к каналу
+яркости).
+
+```python
+from photo import photo_filter, read_rgb, write_rgb
+from color_filter import color_homomorphic_filter
+
+photo = read_rgb("examples/pic3_small.png")
+
+# BT.601: фильтруется Y, Cb/Cr сохраняются точно
+f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0, mode="ycbcr",
+                             pad="reflect")
+out = f.apply(photo)
+write_rgb("out.png", photo_filter.to_uint8(out, output="percentile_ycbcr"))
+
+# RCT: фильтруется Y'', Cr''/Cb'' сохраняются, преобразование обратимо точно
+f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0, mode="rct",
+                             pad="reflect")
+write_rgb("out.png", photo_filter.to_uint8(f.apply(photo),
+                                          output="percentile_ycbcr"))
+```
+
+Для Y-режимов нужна растяжка **по яркости** (`output="percentile_ycbcr"`).
+
 ### Перевод в N бит (`to_uint8`, `to_uint10`, `to_uint12`, `to_uint16`)
 
 Результат `apply` не ограничен диапазоном 0..255, поэтому перед записью нужен перевод:
@@ -92,6 +147,7 @@ write_rgb("out.png", photo_filter.to_uint8(f.apply(photo)))
 | `Режим` | Что делает |
 |---|---|
 | `"percentile"` (по умолчанию) | линейная растяжка по перцентилям |
+| `"percentile_ycbcr"` | растяжка по яркости Y (для режимов `"ycbcr"`/`"rct"`) |
 | `"no"` | только обрезка к диапазону |
 | `"gamma"` | гамма-коррекция после нормировки к [0, 1] |
 
@@ -100,17 +156,24 @@ write_rgb("out.png", photo_filter.to_uint8(f.apply(photo)))
 photo_filter.to_uint8(filtered)                 # растяжка по перцентилям
 photo_filter.to_uint8(filtered, output="no")    # сохранить значения как есть
 photo_filter.to_uint8(filtered, output="gamma", gamma=1.8, low=0.5, high=99.5)
+photo_filter.to_uint8(filtered, output="percentile_ycbcr")  # по яркости Y
 ```
 
 Режимы вывода отличаются только верхней границей `0..2^bits-1`, формулы общие.
-Неизвестный режим или параметр чужого режима — `ValueError` со списком
-доступных.
+Неизвестный режим или параметр, не относящийся к выбранному режиму — `ValueError`
+со списком доступных.
 
-У цветного кадра перцентили берутся по **всем каналам сразу**.
+### Шумоподавление (билатеральный фильтр)
 
-### Шумоподавление (`denoise`, по умолчанию выключено)
+Используется билатеральный фильтр (Tomasi & Manduchi, 1998): вес соседа —
+произведение гаусса по расстоянию (`sigma_space`) и гаусса по разности
+яркостей (`sigma_range`). Считается в float64 — MPFR на этом шаге
+избыточен. По умолчанию **выключено** (`DENOISE_DEFAULT = False`).
 
-Используется билатерный фильтр:
+Подключить фильтр можно тремя способами.
+
+**1. Отдельной функцией после вывода** — самый простой вариант,
+обрабатывается уже готовый кадр:
 
 ```python
 from photo import photo_filter, denoise, read_gray, write_gray
@@ -120,8 +183,50 @@ write_gray("out.png", denoise(out, True))                  # включено
 write_gray("out.png", denoise(out, True, radius=3, sigma_range=25.0))
 ```
 
-`enabled` по умолчанию `DENOISE_DEFAULT = False` — кадр возвращается как есть.
-Считается в float64 — mpfr на этом шаге избыточен.
+**2. Через `process()` — с выбором позиции относительно гомоморфного
+фильтра:**
+
+```python
+from photo import photo_filter, read_gray, write_gray
+
+photo = read_gray("examples/pic1.png")
+f = photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30.0,
+                 denoise=True, filter_place="before")
+write_gray("out.png", f.process(photo))                    # bits=8 по умолчанию
+write_gray("out12.png", f.process(photo, bits=12))         # sigma_range масштабируется
+```
+
+`filter_place` принимает четыре значения:
+
+| Позиция | Что делает |
+|---|---|
+| `"off"` | билатеральный фильтр не применяется |
+| `"before"` | **до** гомоморфного фильтра, в шкале входа |
+| `"after"` (по умолчанию) | **после** вывода, в шкале `0..2^bits−1` |
+| `"before_and_after"` | с обеих сторон |
+
+Позиция и флаг переопределяются на вызове:
+`f.process(photo, denoise=True, filter_place="before")`.
+
+**3. В цветных Y-режимах** — denoise доступен в `"ycbcr"` и `"rct"`,
+где фильтруется одна яркость (в `"rgb"` — `ValueError`, так как
+поканальная фильтрация разрушает границы, которые защищает билатеральный
+вес):
+
+```python
+f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0, mode="ycbcr",
+                             denoise=True, filter_place="before",
+                             denoise_radius=2, denoise_sigma_space=1.0,
+                             denoise_sigma_range=15.0)
+out = f.apply(photo)
+write_rgb("out.png", photo_filter.to_uint8(out, output="percentile_ycbcr"))
+```
+
+**Параметры:** `radius` (полуразмер окна, кадр обрабатывается окном
+`(2·radius+1)²`), `sigma_space` (спад веса с расстоянием, в пикселах),
+`sigma_range` (спад веса с разностью яркости, в отсчётах шкалы вывода —
+15 для 8 бит, ~3850 для 16). `sigma_range` по умолчанию задан для 8 бит
+и автоматически масштабируется при выводе другой разрядности.
 
 ### Отладка
 
@@ -155,12 +260,13 @@ MIN_VALUE — в [docs/filter_recomend.md](docs/filter_recomend.md).
 |---|---|---|
 | `examples/bw_image.py` | `pic1.png` → `pic1_processed.png` | фото в оттенках серого, `lf_gain=0.75`, `hf_gain=2.0`, растяжка по умолчанию |
 | `examples/color_image.py` | `pic3_small.png` → `pic3_small_cold.png` | цвет, освещение холоднее: `lf_gain=(0.99, 1.0, 1.01)` |
+| `examples/color_image_ycbcr.py` | `pic3_small.png` → `pic3_small_ycbcr.png` | цвет, только яркость Y (BT.601), растяжка `percentile_ycbcr` |
 
-Конвейер обработки фотографии в оттенках серого:
+Процесс обработки фотографии в оттенках серого:
 
 ![Фото в оттенках серого](docs/photo_schema_bw.png)
 
-Конвейер обработки цветного фото:
+Процесс обработки цветного фото:
 
 ![Цветное фото](docs/photo_schema_color.png)
 
@@ -225,6 +331,9 @@ python tests/test_all.py            # то же без pytest
 9. Oppenheim A.V. Nonlinear Filtering of Multiplied and Convolved Signals /
    A.V. Oppenheim, R.W. Schafer, T.G. Stockham // Proceedings of the IEEE.
    1968, Vol. 56, No. 8. P. 1264–1291.
+10. Tomasi C. Bilateral Filtering for Gray and Color Images / C. Tomasi,
+    R. Manduchi // Proceedings of the IEEE International Conference on
+    Computer Vision. 1998. P. 839–846.
 
 ## Благодарности
 

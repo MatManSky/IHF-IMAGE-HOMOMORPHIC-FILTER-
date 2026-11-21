@@ -1,15 +1,17 @@
 # IHF-IMAGE-HOMOMORPHIC-FILTER  
 
-**English** / [Русский](README.md) 
+**English** / [Русский](README.md)
 
 ## Homomorphic image filtering using arbitrary-precision arithmetic
 
-**Version**: 0.90
+**Version**: 0.95
 
 **Model**: `I = E·R` → `log₂` → F → spectrum split into LF and HF components → per-component processing → recombination → F⁻¹ → `exp₂` → rounding.
 
-**Implemented**: the basic pipeline, grayscale and color photo processing,
-tests and partially documentation.
+**Implemented**: the basic pipeline, grayscale and color photo processing
+(per-channel, by luma ITU-R BT.601, and fully reversible via RCT),
+bilateral denoising before and/or after homomorphic filtering,
+tests and partial documentation.
 
 ![Homomorphic filter stages](docs/homomorphic_schema_en.png)
 
@@ -61,8 +63,18 @@ photo = read_gray("examples/pic1.png")           # float64 (n, m), values > 0
 f = photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30.0)  # pad="reflect" by default
 write_gray("out.png", f.to_uint8(f.apply(photo)))
 ```
-
 ### Color photo
+
+Three processing modes (`mode`):
+
+| Mode | What is filtered | Notes |
+|---|---|---|
+| `"rgb"` (default) | each channel R, G, B independently | only way to change **color temperature** (per-channel gains) |
+| `"ycbcr"` | luma `Y` only (ITU-R BT.601) | `Cb/Cr` preserved **exactly**; in MPFR; stretch by luma `output="percentile_ycbcr"` |
+| `"rct"` | `Y''` only (ISO/IEC 21122) | **fully reversible** (round-trip 0 LSB); luma weights (0.25/0.50/0.25) differ from BT.601 |
+
+#### Per-channel RGB
+
 Channels are processed independently.
 ```python
 from photo import photo_filter, read_rgb, write_rgb
@@ -79,6 +91,31 @@ Per-channel `lf_gain` modulates illumination (the color of the light), while `hf
 
 "Cooler" tone: `(0.99, 1.0, 1.01)`.
 
+#### Luma modes: YCbCr and RCT
+
+In these modes, gains must be **scalar** (applied to the luma channel only):
+
+```python
+from photo import photo_filter, read_rgb, write_rgb
+from color_filter import color_homomorphic_filter
+
+photo = read_rgb("examples/pic3_small.png")
+
+# BT.601: filter Y, Cb/Cr preserved exactly
+f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0, mode="ycbcr",
+                             pad="reflect")
+out = f.apply(photo)
+write_rgb("out.png", photo_filter.to_uint8(out, output="percentile_ycbcr"))
+
+# RCT: filter Y'', Cr''/Cb'' preserved, transformation reversible
+f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0, mode="rct",
+                             pad="reflect")
+write_rgb("out.png", photo_filter.to_uint8(f.apply(photo),
+                                           output="percentile_ycbcr"))
+```
+
+For luma modes, the stretch must be **by luma** (`output="percentile_ycbcr"`).
+
 ### Conversion to N-bit integer (`to_uint8`, `to_uint10`, `to_uint12`, `to_uint16`)
 
 The result of `apply` is not bounded to `0..255`, so conversion is required before saving:
@@ -86,6 +123,7 @@ The result of `apply` is not bounded to `0..255`, so conversion is required befo
 | Output mode | What it does |
 |---|---|
 | `"percentile"` (default) | Linear stretch of percentiles to the upper bound |
+| `"percentile_ycbcr"` | Stretch by luma Y (for `"ycbcr"`/`"rct"` modes) |
 | `"no"` | Clipping only (filter already performs rounding) |
 | `"gamma"` | Gamma correction after normalization to `[0, 1]` |
 
@@ -101,8 +139,17 @@ Output modes differ only in the upper bound `0..2^bits-1`; the formulas are shar
 
 For a color frame, percentiles are computed jointly across all channels.
 
-### Denoising (`denoise`, disabled by default)
-A bilateral filter is used:
+### Denoising (bilateral filter)
+
+A bilateral filter is used (Tomasi & Manduchi, 1998): a neighbor's weight is
+the product of a distance-based Gaussian (`sigma_space`) and an intensity-based
+Gaussian (`sigma_range`). Computed in float64 — MPFR is redundant here.
+Disabled by default (`DENOISE_DEFAULT = False`).
+
+**Three ways to connect the filter.**
+
+**1. Standalone function after output:**
+
 ```python
 from photo import photo_filter, denoise, read_gray, write_gray
 
@@ -110,8 +157,48 @@ out = photo_filter.to_uint8(filtered)
 write_gray("out.png", denoise(out, True))                          # enabled
 write_gray("out.png", denoise(out, True, radius=3, sigma_range=25.0))
 ```
-`enabled` defaults to `DENOISE_DEFAULT = False` — the frame is returned unchanged.
-Denoising is computed in `float64`; MPFR precision is redundant at this stage.
+
+**2. Via `process()` — choose position relative to the homomorphic filter:**
+
+```python
+from photo import photo_filter, read_gray, write_gray
+
+photo = read_gray("examples/pic1.png")
+f = photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30.0,
+                 denoise=True, filter_place="before")
+write_gray("out.png", f.process(photo))
+write_gray("out12.png", f.process(photo, bits=12))  # sigma_range scales
+```
+
+`filter_place` accepts four values:
+
+| Position | What it does |
+|---|---|
+| `"off"` | bilateral filter is not applied |
+| `"before"` | **before** the homomorphic filter, in the input scale |
+| `"after"` (default) | **after** output, in the `0..2^bits−1` scale |
+| `"before_and_after"` | on both sides |
+
+Position and flag can be overridden at call:
+`f.process(photo, denoise=True, filter_place="before")`.
+
+**3. In color luma modes** — denoise is available in `"ycbcr"` and `"rct"`,
+where only luma is filtered (in `"rgb"` — `ValueError`, because
+per-channel filtering destroys the boundaries that the bilateral weight
+protects):
+
+```python
+f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0, mode="ycbcr",
+                             denoise=True, filter_place="before",
+                             denoise_radius=2, denoise_sigma_space=1.0,
+                             denoise_sigma_range=15.0)
+out = f.apply(photo)
+write_rgb("out.png", photo_filter.to_uint8(out, output="percentile_ycbcr"))
+```
+
+**Parameters:** `radius` (half-window size, frame processed with `(2·radius+1)²` window), `sigma_space` (weight decay with distance, in pixels),
+`sigma_range` (weight decay with luma difference, in output scale counts — 15 for 8-bit, ~3850 for 16). `sigma_range` defaults to 8-bit and
+automatically scales at other output bit-depths.
 
 ### Debugging
 `apply_info` prints every pipeline stage line by line:
@@ -140,6 +227,7 @@ MIN_VALUE — see [docs/filter_recomend.md](docs/filter_recomend.md).
 | --- | --- | --- |
 | `examples/bw_image.py` | `pic1.png` → `pic1_processed.png` | Grayscale photo, `lf_gain=0.75`, `hf_gain=2.0`, default stretch |
 | `examples/color_image.py` | `pic3_small.png` → `pic3_small_cold.png` | Color, cooler illumination: `lf_gain=(0.99, 1.0, 1.01)` |
+| `examples/color_image_ycbcr.py` | `pic3_small.png` → `pic3_small_ycbcr.png` | Color, luma-only Y (BT.601), stretch `percentile_ycbcr` |
 
 Grayscale photo processing pipeline:
 
@@ -211,6 +299,9 @@ References are given in their original language.
 9. Oppenheim A.V. Nonlinear Filtering of Multiplied and Convolved Signals /
    A.V. Oppenheim, R.W. Schafer, T.G. Stockham // Proceedings of the IEEE.
    1968, Vol. 56, No. 8. P. 1264–1291.
+10. Tomasi C. Bilateral Filtering for Gray and Color Images / C. Tomasi,
+    R. Manduchi // Proceedings of the IEEE International Conference on
+    Computer Vision. 1998. P. 839–846.
 
 ## Acknowledgments
 I thank Konstantin Frantsevich Glassman for consultations on homomorphic filtering and image processing.
