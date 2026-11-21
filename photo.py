@@ -9,7 +9,11 @@
        переводят значения в 0..2^bits-1 способом _output_types (по умолчанию
        линейная растяжка);
     4. по желанию убирает шум готового кадра — denoise (билатерный фильтр),
-       выключен по умолчанию.
+       выключен по умолчанию;
+    5. метод process() объединяет вcю обработку (вход → apply → to_uintN)
+       с гибким размещением denoise: off/before/after/before_and_after,
+       чтобы можно было сравнивать влияние фильтра до и после
+       гомоморфного преобразования.
 
 Кадр дополняется до степени двойки (pad="reflect" по умолчанию), так как
 это нужно для БПФ по методу Кули-Тьюки.
@@ -230,12 +234,29 @@ def _to_uint(values: np.ndarray, bits: int, output: str,
     return result
 
 
+# Шумоподавление: билатерный фильтр 
+
+DENOISE_DEFAULT = False  # выключено
+DENOISE_RADIUS = 2          # окно (2*radius + 1)^2 = 5x5
+DENOISE_SIGMA_SPACE = 1.0   # спад веса с расстоянием, пиксели
+DENOISE_SIGMA_RANGE = 15.0  # спад веса с разностью яркости, отсчёты шкалы
+
+# Допустимые позиции билатерального фильтра
+DENOISE_PLACES = ("off", "before", "after", "before_and_after")
+DENOISE_PLACE_DEFAULT = "after"
+
+
 class photo_filter:
     """
     Пример использования:
         photo = read_gray("examples/pic1.png")
         f = photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30)
         write_gray("examples/pic1_processed.png", f.to_uint8(f.apply(photo)))
+
+    Шумоподавление встроено в обработку через process(): флаг denoise включает
+    билатерный фильтр, filter_place задаёт, где именно он стоит — до
+    гомоморфного фильтра (before), после него (after) или с обеих сторон
+    (before_and_after).
     """
 
     def __init__(
@@ -248,14 +269,115 @@ class photo_filter:
         order: int = filtration.ORDER_DEFAULT,
         pad: str = "reflect",
         window: str = None,
+        denoise: bool = DENOISE_DEFAULT,
+        filter_place: str = DENOISE_PLACE_DEFAULT,
+        denoise_radius: int = DENOISE_RADIUS,
+        denoise_sigma_space: float = DENOISE_SIGMA_SPACE,
+        denoise_sigma_range: float = DENOISE_SIGMA_RANGE,
     ):
+        """
+        Параметры шумоподавления:
+            denoise: master-переключатель билатерного фильтра
+            filter_place: "off" | "before" | "after" | "before_and_after";
+                имеет смысл только при denoise=True
+            denoise_radius / denoise_sigma_space / denoise_sigma_range:
+                параметры bilateral; sigma_range задан в отсчётах шкалы
+                8 бит и автоматически масштабируется для вывода другой
+                разрядности на выходе из обработки
+        """
+        if filter_place not in DENOISE_PLACES:
+            raise ValueError(
+                f"Неизвестная позиция шумоподавления: '{filter_place}'. "
+                f"Доступные: {DENOISE_PLACES}."
+            )
         self._filter = homomorphic_filter(
             lf_filter, hf_filter, lf_gain, hf_gain, d0, order
         )
         self._pad = pad
         self._window = window
+        self._denoise = bool(denoise)
+        self._filter_place = filter_place
+        self._denoise_params = {
+            "radius": denoise_radius,
+            "sigma_space": denoise_sigma_space,
+            "sigma_range": denoise_sigma_range,
+        }
+
+    @property
+    def filter_place(self) -> str:
+        # Куда встроен билатерный фильтр (только при denoise=True)
+        return self._filter_place
+
+    @property
+    def denoise(self) -> bool:
+        return self._denoise
+
+    def _stage_active(self, stage: str, on: bool = None,
+                      place: str = None) -> bool:
+        # Активен ли denoise на данном этапе конвейера ("before"/"after")
+        enabled = self._denoise if on is None else bool(on)
+        current = self._filter_place if place is None else place
+        if not enabled or current == "off":
+            return False
+        if stage == "before":
+            return current in ("before", "before_and_after")
+        return current in ("after", "before_and_after")
+
+    def process(
+        self,
+        image: np.ndarray,
+        bits: int = BITS_DEFAULT,
+        output: str = OUTPUT_DEFAULT,
+        filter_place: str = None,
+        denoise: bool = None,
+        **params,
+    ) -> np.ndarray:
+        """
+        Полный цикл: вход -> (denoise before) -> apply -> to_uintN ->
+        (denoise after).
+
+        Параметры:
+            image: матрица (numpy.ndarray или путь к файлу)
+            bits: разрядность вывода — 8, 10, 12 или 16
+            output: режим растяжки для to_uintN (см. to_uint8)
+            filter_place: переопределить позицию из __init__ для этого вызова
+            denoise: переопределить флаг из __init__ для этого вызова
+            **params: параметры выбранного режима растяжки (low, high, gamma)
+
+        Возвращает:
+            numpy.ndarray: кадр dtype uint8 (bits=8) или uint16 (bits>8)
+
+        Исключения:
+            ValueError: при неизвестном filter_place или bits/output
+        """
+        place = self._filter_place if filter_place is None else filter_place
+        if place not in DENOISE_PLACES:
+            raise ValueError(
+                f"Неизвестная позиция шумоподавления: '{place}'. "
+                f"Доступные: {DENOISE_PLACES}."
+            )
+        on = self._denoise if denoise is None else bool(denoise)
+
+        if not isinstance(image, np.ndarray):
+            image = read_gray(image)
+        source = np.asarray(image, dtype=np.float64)
+
+        if self._stage_active("before", on, place):
+            source = bilateral(source, **self._denoise_params)
+
+        filtered = self.apply(source)
+        result = _to_uint(filtered, bits, output, **params)
+
+        if self._stage_active("after", on, place):
+            kwargs = dict(self._denoise_params)
+            if bits != 8:
+                # sigma_range откалиброван на шкалу 8 бит
+                kwargs["sigma_range"] *= MAX_UINT[bits] / MAX_UINT[8]
+            result = bilateral(result, **kwargs)
+        return result
 
     def apply(self, image: np.ndarray) -> np.ndarray:
+
         """
         Применить гомоморфный фильтр к фотографии.
 
@@ -308,12 +430,6 @@ class photo_filter:
         # Вывод в 16 бит (0..65535, dtype uint16)
         return _to_uint(values, 16, output, **params)
 
-# Шумоподавление: билатерный фильтр (ослабляет шум, не трогая границы)
-
-DENOISE_DEFAULT = False  # выключено: шумоподавление нужно не всегда
-DENOISE_RADIUS = 2          # окно (2*radius + 1)^2 = 5x5
-DENOISE_SIGMA_SPACE = 1.0   # спад веса с расстоянием, пикселы
-DENOISE_SIGMA_RANGE = 15.0  # спад веса с разностью яркости, отсчёты шкалы
 
 
 def bilateral(

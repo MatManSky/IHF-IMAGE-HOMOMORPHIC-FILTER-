@@ -20,12 +20,16 @@ parallel=True — только параллельно, parallel=None —
         Y'' = (R+2G+B)/4, Cr'' = R-G, Cb'' = B-G; конверсия обратима
         точно (0 LSB), но веса яркости отличаются от BT.601.
 
+В режимах "ycbcr" и "rct" можно включить билатеральный фильтр на канале
+яркости (denoise + filter_place): "before" — до гомоморфного фильтра,
+"after" — после, "before_and_after" — с обеих сторон.
+
 Ссылки:
  1. Красильников Н.Н. Цифровая обработка 2D- и 3D-изображений: учеб.
     пособие. СПб.: БХВ-Петербург, 2011. 608 с.
  2. ITU-R BT.601-7. Encoding-Parameter Digital Values of Constant
     Luminance in the Component Digital Television Interface. 2011.
- 3. ISO/IEC 21122-1:2022.
+ 3. ISO/IEC 21122-1:2022 (опционально).
 """
 
 import multiprocessing
@@ -174,9 +178,14 @@ def _rct_inverse(rct: list) -> np.ndarray:
 def _filter_channel(job) -> np.ndarray:
     # Рабочая функция пула: фильтрация одного канала в дочернем процессе.
     (channel, lf_filter, hf_filter, lf_gain, hf_gain, d0, order,
-     pad, window) = job
+     pad, window, use_mpfr) = job
     single = homomorphic_filter(lf_filter, hf_filter, lf_gain, hf_gain,
                                 d0, order)
+    if use_mpfr:
+        # mpfr-путь: float64 → mpfr-матрица → log2 → БПФ → exp2(mpfr)
+        mpfr_matrix = [[mpfr(v) for v in row]
+                       for row in channel.tolist()]
+        return single.apply(mpfr_matrix, pad=pad, window=window)
     return single.apply(channel, pad=pad, window=window)
 
 
@@ -240,11 +249,44 @@ class color_homomorphic_filter:
         pad: str = None,
         window: str = None,
         mode: str = "rgb",
+        denoise: bool = False,
+        filter_place: str = "after",
+        denoise_radius: int = 2,
+        denoise_sigma_space: float = 1.0,
+        denoise_sigma_range: float = 15.0,
     ):
+        """
+        Параметры шумоподавления (только для режимов "ycbcr" и "rct"):
+            denoise: master-переключатель билатерного фильтра на яркости
+            filter_place: "off" | "before" | "after" | "before_and_after"
+            denoise_radius / denoise_sigma_space / denoise_sigma_range:
+                параметры bilateral в шкале яркости 0..255
+
+        Исключения:
+            ValueError: если mode неизвестен, усиления не скаляры в
+                Y-режиме, filter_place неизвестен или denoise=True в
+                "rgb"-режиме
+        """
+        # photo.py импортирует этот модуль, поэтому импорт внутри метода:
+        # так нет циклической зависимости, а константы остаются одни
+        from photo import DENOISE_PLACES
+
         if mode not in _COLOR_MODES:
             raise ValueError(
                 f"Неизвестный режим цвета: '{mode}'. "
                 f"Доступные: {sorted(_COLOR_MODES)}."
+            )
+        if filter_place not in DENOISE_PLACES:
+            raise ValueError(
+                f"Неизвестная позиция шумоподавления: '{filter_place}'. "
+                f"Доступные: {DENOISE_PLACES}."
+            )
+        if denoise and mode == "rgb":
+            raise ValueError(
+                "denoise доступен только в режимах 'ycbcr' и 'rct', где "
+                "фильтруется одна яркость; в 'rgb'-режиме поканальная "
+                "фильтрация разрушает границы, которые защищает "
+                "билатерный вес."
             )
         self._lf_filter = lf_filter
         self._hf_filter = hf_filter
@@ -255,6 +297,13 @@ class color_homomorphic_filter:
         self._pad = pad
         self._window = window
         self._mode = mode
+        self._denoise = bool(denoise)
+        self._filter_place = filter_place
+        self._denoise_params = {
+            "radius": denoise_radius,
+            "sigma_space": denoise_sigma_space,
+            "sigma_range": denoise_sigma_range,
+        }
         # В режимах ycbcr и rct усиления применяются к яркости
         if mode in ("ycbcr", "rct"):
             for name, gains in (("lf_gain", self._lf_gain),
@@ -273,7 +322,8 @@ class color_homomorphic_filter:
                     lf_filter, hf_filter, lf, hf, d0, order)
 
     def apply(self, image: np.ndarray,
-              parallel: bool = None) -> np.ndarray:
+              parallel: bool = None,
+              use_mpfr: bool = False) -> np.ndarray:
         """
         Применить гомоморфный фильтр к цветному изображению.
 
@@ -285,6 +335,9 @@ class color_homomorphic_filter:
             parallel: None — автоматически, True — параллельно,
                       False — последовательно (для ycbcr-режима не
                       используется, всегда один канал)
+                   use_mpfr: True — mpfr-тракт для RGB (log2/exp2 над mpfr,
+                   round_away на выходе); False — float64-путь
+                   (exp2 через _antilogarithm). По умолчанию False.
 
         Возвращает:
             numpy.ndarray: результат (int64, формы входа); альфа
@@ -296,7 +349,7 @@ class color_homomorphic_filter:
         """
         image = np.asarray(image)
         if image.ndim != 3 or image.shape[2] not in (CHANNELS,
-                                                     CHANNELS + 1):
+                                                      CHANNELS + 1):
             raise ValueError(
                 f"Ожидается цветное изображение формы (n, m, {CHANNELS}) "
                 f"или (n, m, {CHANNELS + 1}), получена форма {image.shape}"
@@ -307,7 +360,7 @@ class color_homomorphic_filter:
         elif self._mode == "rct":
             result = self._apply_rct(rgb)
         else:
-            result = self._apply_rgb(rgb, parallel)
+            result = self._apply_rgb(rgb, parallel, use_mpfr)
         if image.shape[2] == CHANNELS + 1:
             alpha = image[:, :, CHANNELS].astype(np.float64)
             alpha = np.floor(alpha + 0.5).astype(result.dtype)
@@ -320,8 +373,13 @@ class color_homomorphic_filter:
         ycc = _rgb_to_ycbcr_mpfr(rgb)
         lf, hf = self._lf_gain[0], self._hf_gain[0]
         single = self._filters[(lf, hf)]
-        y_new = single.apply(_y_of_ycbcr(ycc), pad=self._pad,
+        y_mat = _y_of_ycbcr(ycc)
+        if self._stage_active("before"):
+            y_mat = self._denoise_y(y_mat)
+        y_new = single.apply(y_mat, pad=self._pad,
                              window=self._window, as_float=True)
+        if self._stage_active("after"):
+            y_new = self._denoise_y(y_new)
         return _ycbcr_to_rgb_mpfr(_merge_y(ycc, y_new))
 
     def _apply_rct(self, rgb: np.ndarray) -> np.ndarray:
@@ -329,34 +387,84 @@ class color_homomorphic_filter:
         rct = _rct_forward(rgb)
         lf, hf = self._lf_gain[0], self._hf_gain[0]
         single = self._filters[(lf, hf)]
-        y_new = single.apply(_y_of_ycbcr(rct), pad=self._pad,
+        y_mat = _y_of_ycbcr(rct)
+        if self._stage_active("before"):
+            y_mat = self._denoise_y(y_mat)
+        y_new = single.apply(y_mat, pad=self._pad,
                              window=self._window, as_float=True)
+        if self._stage_active("after"):
+            y_new = self._denoise_y(y_new)
         return _rct_inverse(_merge_y_rct(rct, y_new))
 
+    def _stage_active(self, stage: str) -> bool:
+        # Активен ли denoise на данном этапе ("before"/"after")
+        if not self._denoise or self._filter_place == "off":
+            return False
+        if stage == "before":
+            return self._filter_place in ("before", "before_and_after")
+        return self._filter_place in ("after", "before_and_after")
+
+    def _denoise_y(self, y_matrix: list) -> list:
+        """
+        Билатерный фильтр матрицы яркости (mpfr-список или float64).
+
+        Преобразует к float64, применяет photo.bilateral, возвращает
+        mpfr-список той же формы.
+        """
+        from photo import bilateral
+
+        float_arr = np.array(
+            [[float(v) for v in line] for line in y_matrix],
+            dtype=np.float64,
+        )
+        denoised = bilateral(float_arr, **self._denoise_params)
+        return [[mpfr(v) for v in line] for line in denoised]
+
     def _apply_rgb(self, rgb: np.ndarray,
-                   parallel: bool = None) -> np.ndarray:
+                   parallel: bool = None,
+                   use_mpfr: bool = False) -> np.ndarray:
         # Три цветовых канала: последовательно или пулом процессов
+        # use_mpfr=True — mpfr-тракт целиком (log2/exp2 над mpfr,
+        # round_away на выходе); use_mpfr=False — float64-путь (exp2
+        # через _antilogarithm, float64-арифметика на выходе).
         if parallel is None:
             parallel = rgb.shape[0] * rgb.shape[1] >= _PARALLEL_MIN_PIXELS
         if not parallel:
-            return self._apply_channels([
-                self._filters[(self._lf_gain[k], self._hf_gain[k])].apply(
-                    rgb[:, :, k], pad=self._pad, window=self._window)
+            if use_mpfr:
+                # Последовательный mpfr-путь: каждый канал в mpfr-матрице
+                channels = [self._filters[
+                    (self._lf_gain[k], self._hf_gain[k])].apply(
+                    [[mpfr(v) for v in row]
+                     for row in rgb[:, :, k].tolist()],
+                    pad=self._pad, window=self._window)
+                    for k in range(CHANNELS)]
+            else:
+                channels = [
+                    self._filters[(self._lf_gain[k], self._hf_gain[k])].apply(
+                        rgb[:, :, k], pad=self._pad, window=self._window)
+                    for k in range(CHANNELS)]
+            return self._apply_channels(channels)
+        if use_mpfr:
+            jobs = [
+                (rgb[:, :, k], self._lf_filter, self._hf_filter,
+                 self._lf_gain[k], self._hf_gain[k], self._d0, self._order,
+                 self._pad, self._window, True)
                 for k in range(CHANNELS)
-            ])
-        jobs = [
-            (rgb[:, :, k], self._lf_filter, self._hf_filter,
-             self._lf_gain[k], self._hf_gain[k], self._d0, self._order,
-             self._pad, self._window)
-            for k in range(CHANNELS)
-        ]
+            ]
+        else:
+            jobs = [
+                (rgb[:, :, k], self._lf_filter, self._hf_filter,
+                 self._lf_gain[k], self._hf_gain[k], self._d0, self._order,
+                 self._pad, self._window, False)
+                for k in range(CHANNELS)
+            ]
         try:
             executor = _pool()
             channels = list(executor.map(_filter_channel, jobs))
         except (BrokenProcessPool, OSError):
             # Пул недоступен, считаем последовательно
             _drop_pool()
-            return self._apply_rgb(rgb, parallel=False)
+            return self._apply_rgb(rgb, parallel=False, use_mpfr=use_mpfr)
         return self._apply_channels(channels)
 
     def _apply_channels(self, channels) -> np.ndarray:

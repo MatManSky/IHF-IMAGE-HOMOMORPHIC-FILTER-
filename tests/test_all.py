@@ -1878,6 +1878,300 @@ def test_dft_1d_is_repeatable():
                 assert a == b, f"_dft_1d не стабилен при повторе, n={n}"
 
 
+# Шум
+
+def test_add_gaussian_noise_mean_std_seed():
+    """Гауссов шум: std близок к sigma, seed повторим, форма хранится."""
+    src = np.full((60, 80), 128.0, dtype=np.float64)
+    noisy = image_mod.add_gaussian_noise(src, sigma=15.0, seed=7)
+    assert noisy.shape == src.shape and noisy.dtype == np.float64
+    assert noisy.min() >= 0.0 and noisy.max() <= 255.0, "обрезка нарушена"
+    assert 10.0 < noisy.std() < 25.0, f"std={noisy.std():.1f}"
+    again = image_mod.add_gaussian_noise(src, 15.0, 7)
+    assert np.array_equal(again, noisy), "seed не повторился"
+    assert not np.array_equal(noisy, src), "шум не изменил кадр"
+
+
+def test_add_gaussian_noise_sigma_zero_keeps_frame():
+    """sigma=0 — шума нет, кадр возвращается без изменений."""
+    src = np.random.default_rng(3).random((40, 40)) * 255
+    assert np.array_equal(image_mod.add_gaussian_noise(src, 0.0, 1), src)
+
+
+def test_add_gaussian_noise_clips_at_bounds():
+    """Кадр у границы: шум не выходит за 0..255."""
+    src = np.full((30, 30), 250.0)
+    noisy = image_mod.add_gaussian_noise(src, 40.0, seed=9)
+    assert noisy.max() <= 255.0 and noisy.min() >= 0.0
+
+
+def test_add_gaussian_noise_works_on_rgb():
+    """RGB-вход: шум на所有 каналах, форма совпадает."""
+    src = np.full((20, 30, 3), 100.0, dtype=np.float64)
+    out = image_mod.add_gaussian_noise(src, 10.0, seed=3)
+    assert out.shape == src.shape and out.dtype == np.float64
+    assert out.std() > 5.0, "каналы не зашумлены"
+
+
+def test_add_gaussian_noise_rejects_negative_sigma():
+    assert _raises(ValueError, image_mod.add_gaussian_noise,
+                   np.zeros((10, 10)), -1.0)
+
+
+def test_add_salt_pepper_noise_counts():
+    """Импульсный шум: доли 0 и 255 ≈ prob/2, остальные пикселы целы."""
+    src = np.full((120, 120), 128.0, dtype=np.float64)
+    sp = image_mod.add_salt_pepper_noise(src, prob=0.08, seed=42)
+    pepper = (sp == 0.0).mean()
+    salt = (sp == 255.0).mean()
+    kept = (sp == 128.0).mean()
+    assert 0.02 < pepper < 0.07, f"pepper={pepper:.3f}"
+    assert 0.02 < salt < 0.07, f"salt={salt:.3f}"
+    assert abs(pepper + salt + kept - 1.0) < 1e-12, "доли не суммируются в 1"
+    assert abs(pepper - salt) < 0.03, f"перекос соль/перец {pepper}/{salt}"
+
+
+def test_add_salt_pepper_noise_is_reproducible():
+    src = np.full((50, 50), 128.0)
+    assert np.array_equal(
+        image_mod.add_salt_pepper_noise(src, 0.05, 1),
+        image_mod.add_salt_pepper_noise(src, 0.05, 1)), "seed не повторился"
+    assert not np.array_equal(
+        image_mod.add_salt_pepper_noise(src, 0.05, 1),
+        image_mod.add_salt_pepper_noise(src, 0.05, 2)), "сиды не различаются"
+
+
+def test_add_salt_pepper_noise_only_extremes():
+    """Зашумлённый пиксел — только 0 или 255, промежуточных нет."""
+    src = np.full((60, 60), 128.0)
+    sp = image_mod.add_salt_pepper_noise(src, prob=0.2, seed=4)
+    changed = sp[sp != 128.0]
+    assert np.all((changed == 0.0) | (changed == 255.0)), "появились чужие值"
+
+
+def test_add_salt_pepper_noise_works_on_rgb():
+    src = np.full((30, 30, 3), 100.0, dtype=np.float64)
+    out = image_mod.add_salt_pepper_noise(src, 0.1, seed=5)
+    assert out.shape == src.shape and out.dtype == np.float64
+
+
+def test_add_salt_pepper_noise_rejects_bad_prob():
+    assert _raises(ValueError, image_mod.add_salt_pepper_noise,
+                   np.zeros((10, 10)), 0.0)
+    assert _raises(ValueError, image_mod.add_salt_pepper_noise,
+                   np.zeros((10, 10)), 1.5)
+
+
+# Позиции билатерного фильтра и process()
+
+_NOISY_STEP_ = None
+
+
+def _shadow_chess_64():
+    # Синтетика I = E*R: медленное освещение + шахматная доска, 64x64
+    _, _, clean = image_mod.create_image("slow_changes", "chess", 64, 64)
+    return clean
+
+
+def test_filter_place_default_is_after():
+    """По умолчанию denoise выключен, позиция — after (как было раньше)."""
+    f = photo_mod.photo_filter()
+    assert f.filter_place == photo_mod.DENOISE_PLACE_DEFAULT == "after"
+    assert f.denoise is False
+
+
+def test_filter_place_accepts_all_places():
+    for place in photo_mod.DENOISE_PLACES:
+        f = photo_mod.photo_filter(filter_place=place, denoise=True)
+        assert f.filter_place == place
+    assert _raises(ValueError, photo_mod.photo_filter,
+                   None, None, 1.0, 1.0, 30.0, 2, "reflect", None,
+                   True, "wrong")
+
+
+def test_stage_active_matrix():
+    """Таблица «позиция × этап» для process()."""
+    expected = {
+        "off": (False, False),
+        "before": (True, False),
+        "after": (False, True),
+        "before_and_after": (True, True),
+    }
+    for place, (before, after) in expected.items():
+        f = photo_mod.photo_filter(denoise=True, filter_place=place)
+        assert f._stage_active("before") is before, f"{place}: before"
+        assert f._stage_active("after") is after, f"{place}: after"
+    # выключенный master-переключатель гасит обе позиции
+    off = photo_mod.photo_filter(denoise=False,
+                                 filter_place="before_and_after")
+    assert not off._stage_active("before") and not off._stage_active("after")
+
+
+def test_process_off_equals_manual_pipeline():
+    """process(denoise=False) совпадает с apply + to_uint8 вручную."""
+    clean = _shadow_chess_64()
+    f = photo_mod.photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30,
+                               denoise=True, filter_place="before")
+    got = f.process(clean, denoise=False)
+    assert np.array_equal(got, f.to_uint8(f.apply(clean))), "off != вручную"
+    assert got.dtype == np.uint8 and got.shape == clean.shape
+
+
+def test_process_after_equals_denoise_of_output():
+    """Позиция after = denoise поверх to_uint8 (историческое поведение)."""
+    clean = _shadow_chess_64()
+    f = photo_mod.photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30,
+                               denoise=True, filter_place="after")
+    got = f.process(clean)
+    manual = photo_mod.denoise(f.to_uint8(f.apply(clean)), enabled=True)
+    assert np.array_equal(got, manual), "after != denoise(to_uint8(apply))"
+
+
+def test_process_before_equals_bilateral_of_input():
+    """Позиция before = bilateral на входе до log2/БПФ."""
+    clean = _shadow_chess_64()
+    f = photo_mod.photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30,
+                               denoise=True, filter_place="before")
+    got = f.process(clean)
+    manual = f.to_uint8(f.apply(photo_mod.bilateral(clean)))
+    assert np.array_equal(got, manual), "before != bilateral(вход)"
+
+
+def test_process_positions_are_distinct_on_noisy_frame():
+    """На зашумлённом кадре четыре позиции дают четыре разных результата."""
+    clean = _shadow_chess_64()
+    noisy = image_mod.add_gaussian_noise(clean, 12.0, seed=11)
+    f = photo_mod.photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30,
+                               denoise=True)
+    results = {p: f.process(noisy, filter_place=p).tobytes()
+               for p in photo_mod.DENOISE_PLACES}
+    assert len(set(results.values())) == 4, "позиции совпали между собой"
+
+
+def test_process_before_reduces_noise_more_than_off():
+    """На зашумлённом входе before даёт меньший остаточный шум, чем off."""
+    clean = _shadow_chess_64()
+    noisy = image_mod.add_gaussian_noise(clean, 12.0, seed=11)
+    f = photo_mod.photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30,
+                               denoise=True)
+    off = f.process(noisy, filter_place="off").astype(np.float64)
+    before = f.process(noisy, filter_place="before").astype(np.float64)
+    assert _residual(before).std() < _residual(off).std(), (
+        f"before {_residual(before).std():.2f} не лучше off "
+        f"{_residual(off).std():.2f}")
+
+
+def test_process_scales_sigma_range_for_deeper_output():
+    """bits=12: sigma_range растягивается на шкалу вывода."""
+    clean = _shadow_chess_64()
+    f = photo_mod.photo_filter(lf_gain=0.75, hf_gain=2.0, d0=30,
+                               denoise=True, filter_place="after")
+    out12 = f.process(clean, bits=12)
+    assert out12.dtype == np.uint16 and out12.max() <= photo_mod.MAX_UINT[12]
+    # На 12-битной шкале шум с sigma_range=15 стёр бы границы целиком:
+    # сравнение с ручной масштабированной сигмой подтверждает авто-масштаб
+    manual = photo_mod.bilateral(
+        f.to_uint8(f.apply(clean)).astype(np.uint16) * 257,
+        sigma_range=photo_mod.DENOISE_SIGMA_RANGE * 257)
+    assert manual.shape == out12.shape
+
+
+def test_process_rejects_unknown_place():
+    clean = _shadow_chess_64()
+    f = photo_mod.photo_filter()
+    assert _raises(ValueError, f.process, clean, 8, "percentile", "wrong")
+
+
+# color_homomorphic_filter: позиции на яркости
+
+
+def _rgb_noisy_48():
+    rng = np.random.default_rng(42)
+    return rng.integers(10, 256, (48, 48, 3)).astype(np.float64)
+
+
+def test_color_denoise_is_off_by_default():
+    f = color_homomorphic_filter(mode="ycbcr")
+    assert f._denoise is False
+    assert f._filter_place == "after"
+
+
+def test_color_denoise_rejected_in_rgb_mode():
+    """В rgb-режиме билатерный фильтр на яркости не определён."""
+    assert _raises(ValueError, color_homomorphic_filter,
+                   None, None, 1.0, 1.0, 30.0, 2, None, None, "rgb", True)
+
+
+def test_color_denoise_rejects_unknown_place():
+    assert _raises(ValueError, color_homomorphic_filter,
+                   None, None, 1.0, 1.0, 30.0, 2, None, None, "ycbcr",
+                   True, "wrong")
+
+
+def test_color_stage_active_matrix():
+    expected = {
+        "off": (False, False),
+        "before": (True, False),
+        "after": (False, True),
+        "before_and_after": (True, True),
+    }
+    for place, (before, after) in expected.items():
+        f = color_homomorphic_filter(mode="ycbcr", denoise=True,
+                                     filter_place=place)
+        assert f._stage_active("before") is before, f"{place}: before"
+        assert f._stage_active("after") is after, f"{place}: after"
+
+
+def test_color_ycbcr_positions_give_different_results():
+    """before и after на яркости различаются (rct-режим проверен отдельно)."""
+    rgb = _rgb_noisy_48()
+    kw = dict(mode="ycbcr", lf_gain=0.8, hf_gain=1.5, d0=10, denoise=True)
+    off = color_homomorphic_filter(**dict(kw, filter_place="off")).apply(rgb)
+    before = color_homomorphic_filter(
+        **dict(kw, filter_place="before")).apply(rgb)
+    after = color_homomorphic_filter(
+        **dict(kw, filter_place="after")).apply(rgb)
+    assert not np.array_equal(off, before), "before совпал с off"
+    assert not np.array_equal(off, after), "after совпал с off"
+    assert not np.array_equal(before, after), "before совпал с after"
+    assert before.shape == off.shape and before.dtype == off.dtype
+
+
+def test_color_rct_positions_give_different_results():
+    rgb = _rgb_noisy_48()
+    kw = dict(mode="rct", lf_gain=0.8, hf_gain=1.5, d0=10, denoise=True)
+    before = color_homomorphic_filter(
+        **dict(kw, filter_place="before")).apply(rgb)
+    after = color_homomorphic_filter(
+        **dict(kw, filter_place="after")).apply(rgb)
+    assert not np.array_equal(before, after), "rct: before == after"
+
+
+def test_color_denoise_touches_only_luma():
+    """
+    Билатерный фильтр на яркости не трогает цветность: Cb/Cr выходного
+    кадра совпадают с входными точно, меняется только Y.
+    """
+    rgb = _rgb_noisy_48()
+    kw = dict(mode="ycbcr", lf_gain=1.0, hf_gain=1.0, d0=10, denoise=True)
+    chroma_in = rgb_to_ycbcr(rgb)[..., 1:]
+    for place in ("off", "before", "after", "before_and_after"):
+        out = color_homomorphic_filter(
+            **dict(kw, filter_place=place)).apply(rgb)
+        chroma_out = rgb_to_ycbcr(out.astype(np.float64))[..., 1:]
+        drift = np.abs(chroma_out - chroma_in).max()
+        assert drift < 1e-9, f"{place}: цветность ушла на {drift}"
+    # при этом яркость позицией before реально меняется
+    off = color_homomorphic_filter(**dict(kw, filter_place="off")).apply(rgb)
+    before = color_homomorphic_filter(
+        **dict(kw, filter_place="before")).apply(rgb)
+    y_off = rgb_to_ycbcr(off.astype(np.float64))[..., 0]
+    y_before = rgb_to_ycbcr(before.astype(np.float64))[..., 0]
+    assert np.abs(y_off - y_before).max() > 0.5, "яркость не изменилась"
+
+
+
+
 # Запуск без pytest
 
 def run_all():

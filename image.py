@@ -6,6 +6,7 @@
     - _type_registry — словари с функциями для каждого типа матрицы
     - create_matrix(name, n, m, kind) — создать матрицу (E или R)
     - create_image(e_type, r_type, n, m) — создать изображение I = E * R
+    - add_gaussian_noise / add_salt_pepper_noise — наложить шум на кадр
 
 Модель изображения: I = E * R, где
     - E — матрица освещения, целые числа (int64) от 1 до 255
@@ -295,3 +296,64 @@ def create_image(
 
     image = e * r
     return e, r, image
+
+
+def add_gaussian_noise(image: np.ndarray,
+                       sigma: float = 15.0,
+                       seed: int = None) -> np.ndarray:
+    """
+    Наложить аддитивный гауссовский шум
+
+    Параметры:
+        image: входная матрица (float64, форма (n, m) или (n, m, 3))
+        sigma: СКО шума
+        seed: сид воспроизводимости
+
+    Возвращает:
+        numpy.ndarray: зашумлённый кадр в float64,
+        значения обрезаны по [0.0, 255.0]
+
+    Исключения:
+        ValueError: если sigma < 0
+    """
+    if sigma < 0:
+        raise ValueError(f"sigma={sigma}: ожидается неотрицательное число")
+
+    source = np.asarray(image, dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    noise = rng.normal(0.0, sigma, source.shape)
+    noisy = np.clip(source + noise, 0.0, 255.0)
+    return noisy
+
+
+def add_salt_pepper_noise(image: np.ndarray,
+                          prob: float = 0.03,
+                          seed: int = None) -> np.ndarray:
+    """
+    Наложить шум типа «соль и перец»
+
+    С вероятностью prob/2 пиксел получает значение 0 (перец),
+    с вероятностью prob/2 — значение 255 (соль), с вероятностью
+    1 − prob — остаётся без изменений.
+
+    Параметры:
+        image: входная матрица (float64, форма (n, m) или (n, m, 3))
+        prob: общая доля зашумлённых пикселов (0 … 1)
+        seed: сид воспроизводимости
+
+    Возвращает:
+        numpy.ndarray: зашумлённый кадр float64
+
+    Исключения:
+        ValueError: если prob не в диапазоне (0, 1]
+    """
+    if prob <= 0 or prob > 1:
+        raise ValueError(f"prob={prob}: ожидается 0 < prob <= 1")
+
+    source = np.asarray(image, dtype=np.float64)
+    rng = np.random.default_rng(seed)
+    u = rng.random(source.shape)
+    pepper = u < 0.5 * prob         # нижняя треть вероятностей -> 0
+    salt = (u >= 0.5 * prob) & (u < prob)  # средняя треть -> 255
+    result = np.where(salt, 255.0, np.where(pepper, 0.0, source))
+    return result.astype(np.float64)
