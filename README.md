@@ -78,8 +78,6 @@ write_gray("out.png", f.to_uint8(f.apply(photo)))
 
 #### Поканальный RGB
 
-Каналы обрабатываются раздельно.
-
 ```python
 from photo import photo_filter, read_rgb, write_rgb
 from color_filter import color_homomorphic_filter
@@ -93,9 +91,9 @@ write_rgb("out.png", photo_filter.to_uint8(f.apply(photo)))
 
 `lf_gain` по каналам меняет **освещённость** (цвет света), `hf_gain` —
 **коэффициент отражения** (детали), согласно модели `I = E·R`:
-в логарифмах низкие частоты — это `E`, высокие — `R`.
+в логарифмах низкие частоты — это `E`, высокие — `R`.  
 
-«Холоднее» (colder): `(0.99, 1.0, 1.01)`.
+«Холоднее» (colder): `(0.99, 1.0, 1.01)`.  
 
 Каналы считаются последовательно или параллельно (пул из трёх процессов):
 
@@ -105,14 +103,9 @@ f.apply(photo, parallel=False)   # только последовательно
 f.apply(photo)                   # None — автоматически от 128×128 px на канал
 ```
 
-Параллельный и последовательный результаты **побитово совпадают**.
-По умолчанию выход считается быстрым путём (`exp2` в float64 с точным
-mpfr fallback); `use_mpfr=True` держит весь тракт канала в MPFR —
-тот же арифметический путь, что в `"ycbcr"`/`"rct"`:
-
-```python
-f.apply(photo, parallel=True, use_mpfr=True)
-```
+Результаты **побитово совпадают**. По умолчанию выход считается быстрым
+путём (`exp2` в float64 с точным mpfr fallback); `use_mpfr=True` держит
+весь тракт канала в MPFR — тот же путь, что в `"ycbcr"`/`"rct"`.
 
 #### Обработка по яркости: YCbCr и RCT
 
@@ -135,10 +128,8 @@ write_rgb("out.png", photo_filter.to_uint8(out, output="percentile_ycbcr"))
 f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0, mode="rct",
                              pad="reflect")
 write_rgb("out.png", photo_filter.to_uint8(f.apply(photo),
-                                          output="percentile_ycbcr"))
+                                           output="percentile_ycbcr"))
 ```
-
-Для Y-режимов нужна растяжка **по яркости** (`output="percentile_ycbcr"`).
 
 ### Перевод в N бит (`to_uint8`, `to_uint10`, `to_uint12`, `to_uint16`)
 
@@ -172,8 +163,7 @@ photo_filter.to_uint8(filtered, output="percentile_ycbcr")  # по яркост�
 
 Подключить фильтр можно тремя способами.
 
-**1. Отдельной функцией после вывода** — самый простой вариант,
-обрабатывается уже готовый кадр:
+**1. Отдельной функцией после вывода** — обрабатывается готовый кадр:
 
 ```python
 from photo import photo_filter, denoise, read_gray, write_gray
@@ -222,11 +212,9 @@ out = f.apply(photo)
 write_rgb("out.png", photo_filter.to_uint8(out, output="percentile_ycbcr"))
 ```
 
-**Параметры:** `radius` (полуразмер окна, кадр обрабатывается окном
-`(2·radius+1)²`), `sigma_space` (спад веса с расстоянием, в пикселах),
-`sigma_range` (спад веса с разностью яркости, в отсчётах шкалы вывода —
-15 для 8 бит, ~3850 для 16). `sigma_range` по умолчанию задан для 8 бит
-и автоматически масштабируется при выводе другой разрядности.
+**Параметры:** `radius` — полуразмер окна, кадр обрабатывается окном
+`(2·radius+1)²`; `sigma_space` — в пикселах; `sigma_range` — в отсчётах
+шкалы вывода (15 для 8 бит, ~3850 для 16).
 
 ### Отладка
 
@@ -262,37 +250,22 @@ MIN_VALUE — в [docs/filter_recomend.md](docs/filter_recomend.md).
 | `examples/color_image.py` | `pic3_small.png` → `pic3_small_cold.png` | цвет, освещение холоднее: `lf_gain=(0.99, 1.0, 1.01)` |
 | `examples/color_image_ycbcr.py` | `pic3_small.png` → `pic3_small_ycbcr.png` | цвет, только яркость Y (BT.601), растяжка `percentile_ycbcr` |
 
-Процесс обработки фотографии в оттенках серого:
+Схемы обработки (пунктирные врезки — опциональный denoise: до фильтра в
+шкале входа или после вывода в шкале `0..2^bits−1`):
 
 ![Фото в оттенках серого](docs/photo_schema_bw.png)
 
-Процесс обработки цветного фото:
-
 ![Цветное фото](docs/photo_schema_color.png)
 
-В обоих примерах есть переменная `DENOISE = False` — шумоподавление готового
-кадра.
+В `bw_image.py` и `color_image.py` он выключен (`DENOISE = False`),
+в `color_image_ycbcr.py` — включён.
 
 ## Документация
 
-### Схемы
-
-Схемы в каталоге `docs/` генерируются из `docs/*.py`. Для пересборки:
-
-```bash
-python docs/shema.py                 # RU-версия
-python docs/shema.py --en            # + EN-версия
-python docs/photo_shema.py           # RU-версии (BW + цвет)
-python docs/photo_shema.py --en      # + EN-версии
-python docs/architecture.py          # RU-версия
-python docs/architecture.py --en     # + EN-версия
-```
-
-Структура модулей и зависимости:
+Схемы в каталоге `docs/` генерируются из `docs/*.py`. Структура модулей
+и зависимости:
 
 ![Архитектура](docs/architecture.png)
-
-Полная документация по настройке параметров ещё в разработке [docs/filter_recomend.md](docs/filter_recomend.md).
 
 ## Тесты
 

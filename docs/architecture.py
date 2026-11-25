@@ -21,7 +21,7 @@ LANGS = {
                  "гомоморфной фильтрации",
         "main": ("main.py", "синтетические сцены\n(I = E·R)"),
         "tests": ("tests/test_all.py",
-                  "117 тестов инвариантов;\nsynthetic_images.py —\n"
+                  "144 теста инвариантов;\nsynthetic_images.py —\n"
                   "сцены для тестов"),
         "processing": ("processing.py", "temperature_gains (R, G, B)\n"
                                         "shift_temperature, balance,\n"
@@ -41,8 +41,8 @@ LANGS = {
         "photo": ("photo.py", "read_gray/write_gray, read_rgb/write_rgb\n"
                               "photo_filter\n"
                               "to_uint8/10/12/16: no | percentile\n"
-                              "| percentile_ycbcr | gamma\n"
-                              "bilateral, denoise — билатерный (выкл)"),
+                               "| percentile_ycbcr | gamma\n"
+                               "bilateral, denoise — до и/или после (выкл)"),
         "filter_core": ("filter.py — ядро гомоморфной фильтрации "
                         "(mpfr/mpc, 256 бит)",
                         "homomorphic_filter: apply(image, pad, window), "
@@ -82,7 +82,7 @@ LANGS = {
                  "homomorphic image filtering",
         "main": ("main.py", "synthetic scenes\n(I = E·R)"),
         "tests": ("tests/test_all.py",
-                  "117 invariant tests;\nsynthetic_images.py —\n"
+                  "144 invariant tests;\nsynthetic_images.py —\n"
                   "scene generators"),
         "processing": ("processing.py", "temperature_gains (R, G, B)\n"
                                         "shift_temperature, balance,\n"
@@ -102,8 +102,8 @@ LANGS = {
         "photo": ("photo.py", "read_gray/write_gray, read_rgb/write_rgb\n"
                               "photo_filter\n"
                               "to_uint8/10/12/16: no | percentile\n"
-                              "| percentile_ycbcr | gamma\n"
-                              "bilateral, denoise — bilateral (off)"),
+                               "| percentile_ycbcr | gamma\n"
+                               "bilateral, denoise — before/after (off)"),
         "filter_core": ("filter.py — homomorphic filtering core "
                         "(mpfr/mpc, 256 bit)",
                         "homomorphic_filter: apply(image, pad, window), "

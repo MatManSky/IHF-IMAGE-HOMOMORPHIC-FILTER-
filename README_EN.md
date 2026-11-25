@@ -75,7 +75,6 @@ Three processing modes (`mode`):
 
 #### Per-channel RGB
 
-Channels are processed independently.
 ```python
 from photo import photo_filter, read_rgb, write_rgb
 from color_filter import color_homomorphic_filter
@@ -89,7 +88,17 @@ write_rgb("out.png", photo_filter.to_uint8(f.apply(photo)))
 
 Per-channel `lf_gain` modulates illumination (the color of the light), while `hf_gain` modulates reflectance (fine detail), in accordance with the model `I = E·R`: in the logarithmic domain, low frequencies correspond to `E` and high frequencies to `R`.
 
-"Cooler" tone: `(0.99, 1.0, 1.01)`.
+Channels are processed sequentially or in parallel (pool of three processes):
+
+```python
+f.apply(photo, parallel=True)    # parallel only
+f.apply(photo, parallel=False)   # sequential only
+f.apply(photo)                   # None — auto from 128×128 px per channel
+```
+
+Results are **bit-identical**. By default the output uses the fast path
+(`exp2` in float64 with an exact mpfr fallback); `use_mpfr=True` keeps the
+whole channel pipeline in MPFR — the same path as in `"ycbcr"`/`"rct"`.
 
 #### Luma modes: YCbCr and RCT
 
@@ -113,8 +122,6 @@ f = color_homomorphic_filter(lf_gain=0.75, hf_gain=2.0, mode="rct",
 write_rgb("out.png", photo_filter.to_uint8(f.apply(photo),
                                            output="percentile_ycbcr"))
 ```
-
-For luma modes, the stretch must be **by luma** (`output="percentile_ycbcr"`).
 
 ### Conversion to N-bit integer (`to_uint8`, `to_uint10`, `to_uint12`, `to_uint16`)
 
@@ -196,9 +203,9 @@ out = f.apply(photo)
 write_rgb("out.png", photo_filter.to_uint8(out, output="percentile_ycbcr"))
 ```
 
-**Parameters:** `radius` (half-window size, frame processed with `(2·radius+1)²` window), `sigma_space` (weight decay with distance, in pixels),
-`sigma_range` (weight decay with luma difference, in output scale counts — 15 for 8-bit, ~3850 for 16). `sigma_range` defaults to 8-bit and
-automatically scales at other output bit-depths.
+**Parameters:** `radius` — half-window size, the frame is processed with a
+`(2·radius+1)²` window; `sigma_space` — in pixels; `sigma_range` — in output
+scale counts (15 for 8-bit, ~3850 for 16).
 
 ### Debugging
 `apply_info` prints every pipeline stage line by line:
@@ -229,36 +236,22 @@ MIN_VALUE — see [docs/filter_recomend.md](docs/filter_recomend.md).
 | `examples/color_image.py` | `pic3_small.png` → `pic3_small_cold.png` | Color, cooler illumination: `lf_gain=(0.99, 1.0, 1.01)` |
 | `examples/color_image_ycbcr.py` | `pic3_small.png` → `pic3_small_ycbcr.png` | Color, luma-only Y (BT.601), stretch `percentile_ycbcr` |
 
-Grayscale photo processing pipeline:
+Processing schematics (dashed insets are the optional denoise: before the
+filter in the input scale, or after output in the `0..2^bits−1` scale):
 
 ![Grayscale photo](docs/photo_schema_bw_en.png)
 
-Color photo processing pipeline:
-
 ![Color photo](docs/photo_schema_color_en.png)
 
-Both examples contain a `DENOISE = False` flag controlling post-filter denoising of the resulting frame.
+In `bw_image.py` and `color_image.py` it is off (`DENOISE = False`),
+in `color_image_ycbcr.py` it is on.
 
 ## Documentation
 
-### Schematics
-
-Schematics in the `docs/` directory are generated from `docs/*.py`. To rebuild:
-
-```bash
-python docs/shema.py                 # RU version
-python docs/shema.py --en            # + EN version
-python docs/photo_shema.py           # RU versions (BW + color)
-python docs/photo_shema.py --en      # + EN versions
-python docs/architecture.py          # RU version
-python docs/architecture.py --en     # + EN version
-```
-
-Module structure and dependencies:
+Schematics in the `docs/` directory are generated from `docs/*.py`. Module
+structure and dependencies:
 
 ![Architecture](docs/architecture_en.png)
-
-Complete documentation for parameter configuration is still in development [docs/filter_recomend.md](docs/filter_recomend.md).
 
 ## Tests
 
